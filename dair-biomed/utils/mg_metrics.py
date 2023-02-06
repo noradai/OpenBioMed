@@ -101,8 +101,8 @@ def f1_score(y_true, y_pred):
     return fs
 
 def pr_auc(y, pred):
-    precision, recall, thresholds = sklearn.metrics.precision_recall_curve(y, pred)
-    pr_auc = sklearn.metrics.auc(recall, precision)
+    precision, recall, thresholds = precision_recall_curve(y, pred)
+    pr_auc = auc(recall, precision)
     return pr_auc
 
 

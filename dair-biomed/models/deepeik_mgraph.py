@@ -201,7 +201,7 @@ class GraphDenseNet(nn.Module):
         return x
 
 class MGraphDTA(nn.Module):
-    def __init__(self, block_num, vocab_protein_size, embedding_size=128, filter_num=32, out_dim=2):
+    def __init__(self, block_num, vocab_protein_size, embedding_size=128, filter_num=32, out_dim=1):
         super().__init__()
         self.protein_encoder = TargetRepresentation(block_num, vocab_protein_size, embedding_size)
         self.ligand_encoder = GraphDenseNet(num_input_features=87, out_dim=filter_num*3, block_config=[8, 8, 8], bn_sizes=[2, 2, 2])
@@ -241,22 +241,12 @@ class MGraphDTA(nn.Module):
     def forward(self, data):
         # print(data)
         
-        device = torch.device('cuda:0')
+        # device = torch.device('cuda:0')
         target = data.target
         protein_x = self.protein_encoder(target)
         ligand_x = self.ligand_encoder(data)
         
-        
-        
         kg_x = self.kg_encoder(data.kg)
-
-        # kg_np = kg_x[0].cpu().numpy().tolist()
-        # kg_all.append(kg_np)
-        # if len(kg_all)==2803:
-        #     np.save(open("alldrug_kg_embed.npy", "wb"), np.array(kg_all))
-        # print(kg_all)
-
-
         text_x = self.text_encoder(data.text)
         drug_fp_x = self.drug_fp_encoder(data.drug_fp)
         prot_desc_x = self.prot_desc_encoder(data.prot_desc)
@@ -265,40 +255,12 @@ class MGraphDTA(nn.Module):
         x = self.fc1(x)
 
         # kg_x = torch.zeros(kg_x.shape)
-        # kg_x = kg_x.to(device)
+        # # kg_x = kg_x.to(device)
+        # # text_x = torch.zeros(text_x.shape)
+        # text_x = text_x.to(device)
+        # # x = torch.zeros(x.shape)
+        # x = x.to(device)
 
-        # text_x = torch.zeros(text_x.shape)
-        text_x = text_x.to(device)
-        # x = torch.zeros(x.shape)
-        x = x.to(device)
-
-        x = torch.cat([x, kg_x,text_x], dim=-1)
-        
+        x = torch.cat([x, kg_x,text_x], dim=-1)   
         x = self.classifier(x)
-        
-
-        # for i in range(len(self.classifier)):
-
-        #     x = self.classifier[i](x)
-        #     if i == 5:
-        #         kg_np = x[0].cpu().numpy().tolist()
-        #         kg_all.append(kg_np)
-        #         if len(kg_all)==2803:
-        #             np.save(open("clas_-2_use_struct_embed.npy", "wb"), np.array(kg_all))
-        #         # print(kg_all)
-
         return x
-
-
-
-
-        # print('kg====')
-        # kg_x = torch.zeros(kg_x.shape)
-        # kg_x = kg_x.to(device)
-
-
-
-
-        # print(kg_x.shape)
-        # print('text===')
-        # print(text_x.shape)

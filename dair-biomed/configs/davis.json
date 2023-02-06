@@ -1,0 +1,45 @@
+{
+    "data":{
+        "name":"Davis",
+        "split": "test",
+        "origin_datapath":"/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/davis",
+        "standard_fold_path": "/share/project/biomed/hk/hk/Open_DAIR_BioMed/standard_fold",
+        "type":"cold_drug",
+        "n_fold": 5,
+        "fold_num": 0,
+        "from_pretrained_path": "/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/"
+    },
+    "modle":{
+        "type":"regression"
+    },
+    "drug": {
+        "smiles": {
+            "type": "cnn",
+            "freeze": true,
+            "encoder_path": "save_model/ckpt_ret01.pt",
+            "dropout": 0.1,
+            "hidden_size": 256,
+            "return_hidden_state": false
+        },
+        "prop": {
+            "input_size": 1024,
+            "hidden_size": 256
+        }
+    },
+    "target": {
+        "seq": {
+            "freeze": false,
+            "type": "mcnn",
+            "num_layers": 3,
+            "hidden_size": 256
+        },
+        "prop": {
+            "input_size": 147,
+            "hidden_size": 256
+        }
+    },
+    "decoder": {
+        "type": "mlp",
+        "output_size": 1
+    }
+}

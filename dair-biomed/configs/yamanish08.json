@@ -1,12 +1,16 @@
 {
     "data":{
-        "split": "train",
-        "origin_datapath":"/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/yamanishi_08/",
+        "name":"Y08",
+        "split": "test",
+        "origin_datapath":"/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/yamanishi_08",
         "standard_fold_path": "/share/project/biomed/hk/hk/Open_DAIR_BioMed/standard_fold",
         "type":"cold_drug",
         "n_fold": 5,
         "fold_num": 0,
         "from_pretrained_path": "/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/"
+    },
+    "modle":{
+        "type":"classification"
     },
     "drug": {
         "smiles": {

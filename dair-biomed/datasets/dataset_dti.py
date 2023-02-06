@@ -10,6 +10,7 @@ import torch.nn.functional as F
 from torch_geometric.data import Data, Dataset, DataLoader
 from transformers import BertModel, BertTokenizer
 from rdkit import Chem
+from rdkit.Chem import MolStandardize
 from rdkit.Chem import AllChem, ChemicalFeatures
 from rdkit import RDLogger,RDConfig                                                                                                                                                               
 RDLogger.DisableLog('rdApp.*')  
@@ -24,6 +25,8 @@ from sklearn.metrics import jaccard_score
 from PyBioMed.PyProtein import CTD
 from sklearn.preprocessing import OneHotEncoder
 from transformers import BertTokenizer
+from collections import OrderedDict
+import difflib
 
 class UFS(object):
     def __init__(self, n):
@@ -110,8 +113,8 @@ class KG(object):
     def load_drugs(self, path, save=False, save_path=None):
         self.drugs = self.load_node(path)
         for key, value in self.drugs.items():
-            smile = value["SMILES"]
-            self.drugs_dict[smile] = {"bmkg_id": str(key), "text": value["text"], "fingerprint": value["fingerprint"]}
+            smile = value["SMILES"]            
+            self.drugs_dict[smile] = {"bmkg_id": str(key), "text": value["text"], "fingerprint": value["fingerprint"]}           
         if save:
             if not save_path:
                 save_path = osp.join(osp.dirname(path), "SMILES_dict.json")
@@ -168,6 +171,57 @@ class KG(object):
         except Exception as e:
             # print(e)
             return (None, None, None)
+            
+    def get_finger(self, smile):
+        mols =Chem.MolFromSmiles(smile)
+        fp = AllChem.GetMorganFingerprintAsBitVect(mols,2,nBits=1024,)
+        fp = list(fp)
+        return fp
+        
+    def get_cos_similar(self, v1, v2):
+        num = float(np.dot(v1, v2))  # 向量点乘
+        denom = np.linalg.norm(v1) * np.linalg.norm(v2)  # 求模长的乘积
+        return 0.5 + 0.5 * (num / denom) if denom != 0 else 0
+        
+    def get_drug_wfin(self, smi, radius=2):
+        fin = self.get_finger(smi)
+        drug_id = ''
+        max_equ = 0.9
+        for kg_smi,drug in self.drugs_dict.items():
+            kg_fin = drug['fingerprint']
+            equ_val = self.get_cos_similar(fin,kg_fin)
+            if equ_val>max_equ and drug['bmkg_id'] in self.kg_embedding.keys():
+                max_equ = equ_val
+                drug_id = drug['bmkg_id']
+                drug_use = drug
+        if drug_id != '':
+            drug_embedding = self.kg_embedding[drug_id]
+            # drug_graph = nx.ego_graph(self.G, drug_id, radius)
+            drug_graph = None
+            return (drug_use, drug_graph, drug_embedding)
+        else:
+            return (None, None, None)
+        
+    
+    def string_similar(self, s1, s2):
+        return difflib.SequenceMatcher(None, s1, s2).quick_ratio()
+        
+    def get_drug_wseqsim(self, smi, radius=2):
+        drug_id = ''
+        max_equ = 0.9
+        for kg_smi,drug in self.drugs_dict.items():
+            equ_val = self.string_similar(smi,kg_smi)
+            if equ_val>max_equ and drug['bmkg_id'] in self.kg_embedding.keys():
+                max_equ = equ_val
+                drug_id = drug['bmkg_id']
+                drug_use = drug
+        if drug_id != '':
+            drug_embedding = self.kg_embedding[drug_id]
+            # drug_graph = nx.ego_graph(self.G, drug_id, radius)
+            drug_graph = None
+            return (drug_use, drug_graph, drug_embedding)
+        else:
+            return (None, None, None)
 
     def get_protein(self, seq, radius=2):
         try:
@@ -197,12 +251,24 @@ class BMKG_DP(KG):
         self.load_proteins(osp.join(path, "bmkg-dp_protein.json"), save=True, save_path="")
         # self.load_edges(osp.join(path, "kg_data.csv"))
 
+SUPPORTED_KG = {"BMKG_DP": BMKG_DP}
 
-class BMKG(KG):
-    def __init__(self, path):
-        super(BMKG, self).__init__()
-        pass
-SUPPORTED_KG = {"BMKG_DP": BMKG_DP, "BMKG": BMKG}
+def can_smiles(smile):
+    try:
+        mol = Chem.MolFromSmiles(smile)
+        # create a standardizer object
+        standardizer = MolStandardize.normalize
+
+        # standardize the molecule
+        standardized_mol = standardizer.Normalizer().normalize(mol)
+
+        # get the standardized SMILES string
+        standardized_smiles = Chem.MolToSmiles(standardized_mol, isomericSmiles=False)
+
+    except:
+        standardized_smiles = smile
+        print(f'smiles have no mol')
+    return standardized_smiles
 
 
 
@@ -312,7 +378,6 @@ class Yamanishi08(Dataset):
         self.id2tokseq = dict(zip(self.target_ids, target_seq))
         self.ctd = np.loadtxt(osp.join(self.origin_datapath, 'pro_ctd.txt'), delimiter=',')
         
-
         # gen standard data
         if not osp.exists(self.standard_fold_path):
                 os.mkdir(self.standard_fold_path)
@@ -330,14 +395,16 @@ class Yamanishi08(Dataset):
 
         # kg info:
         #kg
+        # TODO: kg_path也得写到config中
         kg_path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/BMKG-DP'
         tokenizer = BertTokenizer.from_pretrained("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/")
+        # TODO: 这里名字重新起个名吧
         model = PubMedBERT("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/", dropout=0, dim_reduction=False).to(0)
         bmkg = BMKG_DP(kg_path)
         self.kg_enc = []
         self.text_enc = []
-        cnt_d = 0
-        cnt_p = 0
+        cnt_d = []
+        cnt_p = []
         for i, d_id in enumerate(self.drug_id):
             # print(i,d_id)
             smi = self.id2smiles[d_id]
@@ -345,27 +412,29 @@ class Yamanishi08(Dataset):
             
             drug, drug_graph, drug_embedding = bmkg.get_drug(smi)
             protein, protein_graph, protein_embedding = bmkg.get_protein(seq)
-
+            # TODO: 这里是None的
             if drug == None:
                 text_d = ''
                 kg_d = np.zeros(256)
             else:
-                cnt_d+=1
                 kg_d =drug_embedding
                 text_d = drug['text']
+                if d_id not in cnt_d:
+                    cnt_d.append(d_id)
 
             if protein == None:
                 kg_p = np.zeros(256)
                 text_p = ''
             else:
-                cnt_p +=1
                 kg_p =protein_embedding
                 text_p = protein['text']
+                if seq not in cnt_p:
+                    cnt_p.append(seq)
                 
             # print('kg_p=============', kg_p.shape)
             # print("kg_d==============", kg_d.shape)
             
-
+            # TODO: kge直接concatenate了？
             kg = np.concatenate((kg_d, kg_p), axis=0)
             # print('kg===========',kg.shape)
             self.kg_enc.append(kg)
@@ -373,7 +442,7 @@ class Yamanishi08(Dataset):
             text = tokenizer(text, max_length=512, truncation=True, return_tensors='pt')
             text = model((text['input_ids'].to(0), text['attention_mask'].to(0))).detach().cpu()
             self.text_enc.append(text)
-        print("matched to kg: %d / %d drug; %d / %d protein" % (cnt_d, len(self.drug_id), cnt_p, len(self.target_id)))
+        print("matched to kg: %d / %d drug; %d / %d protein" % (len(cnt_d), len(self.drug_ids), len(cnt_p), len(self.target_ids)))
             
 
     def __getitem__(self, index):
@@ -454,7 +523,7 @@ class Yamanishi08(Dataset):
         return merged_clusters
 
     def standard_split_08(self, path):
-
+        # TODO: 这里还有问题不？
         df1 = pd.read_csv(osp.join(path, 'data_folds/warm_start_1_1/test_fold_4.csv'))
         df2 = pd.read_csv(osp.join(path, 'data_folds/warm_start_1_1/train_fold_4.csv'))
         df_all = pd.concat([df1,df2],axis=0,ignore_index=True)  #将df2数据与df1合并
@@ -565,25 +634,12 @@ class Yamanishi08(Dataset):
                         for x in cold_cluster_test:
                             f.write(",".join(map(str, x)) + "\n")
 
-    def can_smiles(self, smiles):
-        smiles=smiles.tolist()
-        cnt =0
-        can_smiles = []
-        for origin_sm in smiles:
-            try:
-                mol = Chem.MolFromSmiles(origin_sm)
-                canonical_smi_PUBCHEM = Chem.MolToSmiles(mol)
-                can_smiles.append(canonical_smi_PUBCHEM)
-            except:
-                can_smiles.append(origin_sm)
-                cnt+=1
-                print(f'{cnt} smiles have no mol')
-        return np.array(smiles)
+
 
     def load_smiles(self, path):
         drug_id = np.loadtxt(path, dtype=str, skiprows=1, usecols=(0), comments="!", delimiter=',')
         smiles = np.loadtxt(path, dtype=str, skiprows=1, usecols=(1), comments="!", delimiter=',')
-        smiles = self.can_smiles(smiles)
+        smiles = [can_smiles(sm) for sm in smiles]
         return drug_id, smiles
 
     def load_protein_seq(self, path, tokenizer="cnn"):
@@ -591,6 +647,7 @@ class Yamanishi08(Dataset):
         target_seq = np.loadtxt(path, dtype=str, skiprows=1, usecols=(2), delimiter=',')
         target_seq_enc = []
         for elem in target_seq:
+            # 把蛋白子根据不同的tokenizer方式进行处理
             target_seq_enc.append(tok_protein(elem, tokenizer))
         return target_id, np.array(target_seq_enc), dict(zip(target_seq, target_id)), dict(zip(target_id, target_seq))
 
@@ -602,7 +659,7 @@ class Yamanishi08(Dataset):
         # print("p id=", target_ids[0])
         label = np.array([float(x) for x in label])
         return drug_ids, target_ids, label
-
+    # TODO: 这个是提前准备好的？
     def load_cold_data(self, path):
         cur_path = osp.join(path, self.cold, self.csv_name + ".csv")
 
@@ -613,6 +670,301 @@ class Yamanishi08(Dataset):
         # print("p id=", target_ids[0])
         label = np.array([float(x) for x in label])
         return drug_ids, target_ids, label
+
+
+class Davis_KIBA(Dataset):
+    def __init__(self, config, data_type):
+        super(Davis_KIBA, self).__init__()
+        self.config = config
+        self.split = data_type
+        self.origin_datapath = config['data']['origin_datapath']
+        self.prot_tokenizer = 'mcnn'
+        
+        # path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/davis'
+        path = self.origin_datapath
+
+        Y = pickle.load(open(path + "/Y", "rb"), encoding='latin1')
+        label_row_inds, label_col_inds = np.where(np.isnan(Y)==False)
+
+        if 'test' in self.split:
+            fold = json.load(open(path + "/folds/test_fold_setting1.txt"))
+        else:
+            folds = json.load(open(path+ "/folds/train_fold_setting1.txt"))
+            fold = folds[0]#TODO:cofig train fold ; paper split
+        
+        # drug info:
+        can_sms_dic = json.load(open(path+ "/ligands_can.txt"),object_pairs_hook=OrderedDict)
+        
+        can_sms_all = list(can_sms_dic.values())
+        print('origin smiles=============',can_sms_all[0])
+        
+        can_sms_all = [can_smiles(sm) for sm in can_sms_all]
+        print('drug_smiles smiles=============',can_sms_all[0])
+        drug_indices = label_row_inds[fold]
+        
+        self.drug_smiles = [can_sms_all[i] for i in drug_indices]
+
+        self.graph_dict = dict()
+        for smile in tqdm(can_sms_all, total=len(can_sms_all)):
+            mol = Chem.MolFromSmiles(smile)
+            if mol == None:
+                print("Unable to process: ", smile)
+                continue
+            self.graph_dict[smile] = mol_to_graph(mol)
+            
+        # protein info:
+        protein_indices = label_col_inds[fold]
+        protins_dic = json.load(open(path+ "/proteins.txt"), object_pairs_hook=OrderedDict)
+        pro_seq_all = list(protins_dic.values())
+        self.pro_seqs = [pro_seq_all[i] for i in protein_indices]
+        
+        # labels:
+        self.labels = Y[drug_indices,protein_indices]
+        if "davis" in path:
+            self.labels = [-np.log10(y/1e+9) for y in self.labels]
+        
+
+        # kg info:
+        #kg
+        # TODO: kg_path也得写到config中
+        kg_path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/BMKG-DP'
+        tokenizer = BertTokenizer.from_pretrained("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/")
+        # TODO: 这里名字重新起个名吧
+        model = PubMedBERT("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/", dropout=0, dim_reduction=False).to(0)
+        bmkg = BMKG_DP(kg_path)
+        self.kg_enc = []
+        self.text_enc = []
+        cnt_d = []
+        cnt_p = []
+        for i, smi in enumerate(self.drug_smiles):
+            # print(i,smi)
+            seq = self.pro_seqs[i]
+            # smi = 'CC[C@H](C)[C@H](NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](CCC(=O)O)NC(=O)[C@H](Cc1ccccc1)NC(=O)[C@H](CC(=O)O)NC(=O)CNC(=O)[C@H](CC(N)=O)NC(=O)CNC(=O)CNC(=O)CNC(=O)CNC(=O)[C@@H]1CCCN1C(=O)[C@H](CCCNC(=N)N)NC(=O)[C@@H]1CCCN1C(=O)[C@H](N)Cc1ccccc1)C(=O)N1CCC[C@H]1C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](CCC(=O)O)C(=O)N[C@@H](Cc1ccc(O)cc1)C(=O)N[C@@H](CC(C)C)C(=O)O'
+            drug, drug_graph, drug_embedding = bmkg.get_drug_wseqsim(smi)
+            protein, protein_graph, protein_embedding = bmkg.get_protein(seq)
+            # TODO: 这里是None的
+            if drug == None:
+                text_d = ''
+                kg_d = np.zeros(256)
+            else:
+                kg_d =drug_embedding
+                text_d = drug['text']
+                if smi not in cnt_d:
+                    cnt_d.append(smi)
+
+            if protein == None:
+                kg_p = np.zeros(256)
+                text_p = ''
+            else:
+                kg_p =protein_embedding
+                text_p = protein['text']
+                if seq not in cnt_p:
+                    cnt_p.append(seq)
+                
+            # print('kg_p=============', kg_p.shape)
+            # print("kg_d==============", kg_d.shape)
+            
+            # TODO: kge直接concatenate了？
+            kg = np.concatenate((kg_d, kg_p), axis=0)
+            # print('kg===========',kg.shape)
+            self.kg_enc.append(kg)
+            text = trunc(text_d) + " [SEP] " + trunc(text_p)
+            text = tokenizer(text, max_length=512, truncation=True, return_tensors='pt')
+            text = model((text['input_ids'].to(0), text['attention_mask'].to(0))).detach().cpu()
+            self.text_enc.append(text)
+        print("all paires matched to kg: %d / %d drug; %d / %d protein" % (len(cnt_d), len(can_sms_all), len(cnt_p), len(pro_seq_all)))
+            
+
+    def __getitem__(self, index):
+        smi = self.drug_smiles[index]
+        seq = self.pro_seqs[index]
+
+        x, edge_index = self.graph_dict[smi]
+        drug_fp = self.get_finger(smi)
+        prot_desc = self.get_ctd(seq)
+        
+        target = seqs2int(seq)
+        target_len = 1200
+        if len(target) < target_len:
+            target = np.pad(target, (0, target_len- len(target)))
+        else:
+            target = target[:target_len]
+        
+
+        x=torch.FloatTensor(np.array(x))
+        edge_index=torch.LongTensor(edge_index).transpose(1, 0)
+        target=torch.LongTensor(np.array([target]))
+        
+        drug_fp = torch.FloatTensor(np.array([drug_fp]))
+        prot_desc = torch.FloatTensor(np.array([prot_desc]))
+        
+        kg_x = torch.FloatTensor(np.array([self.kg_enc[index]]))
+        text_x = self.text_enc[index]
+
+        y = torch.tensor(self.labels[index], dtype=torch.float)
+
+        data = Data(x=x, edge_index=edge_index, target=target,  y=y, drug_fp=drug_fp, prot_desc=prot_desc, kg=kg_x, text=text_x)     
+        return data
+
+    def __len__(self):
+        return len(self.drug_smiles)
+    
+    def get_finger(self, smile):
+        mols =Chem.MolFromSmiles(smile)
+        fp = AllChem.GetMorganFingerprintAsBitVect(mols,2,nBits=1024,)
+        fp = list(fp)
+        return fp
+
+    def get_ctd(self, seq):
+        ctd = CTD.CalculateCTD(seq).values()
+        protein_descriptor = list(ctd)
+        return protein_descriptor
+
+class BMKG(Dataset):
+    def __init__(self, config, data_type):
+        super(BMKG, self).__init__()
+        self.csv_name = type
+        self.config = config
+        self.standard_fold_path = config['data']['standard_fold_path']
+        self.task = "classification"
+        self.split = config['data']['split']
+        self.origin_datapath = config['data']['origin_datapath']
+        self.cold = config['data']['type']
+        self.fold_num = config['data']['fold_num']
+        self.split_num = config['data']['n_fold']
+        self.prot_tokenizer = 'mcnn'
+        
+        # path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/davis'
+        path = self.origin_datapath
+        
+        # drug info:
+        drug_info = json.load(open(path+ "/drug.json"))
+        
+        
+        
+        can_sms_all = []
+        for key, value in drug_info.items():
+            can_sms_all.append(value["SMILES"])    
+
+        self.graph_dict = dict()
+        for smile in tqdm(can_sms_all, total=len(can_sms_all)):
+            mol = Chem.MolFromSmiles(smile)
+            if mol == None:
+                print("Unable to process: ", smile)
+                continue
+            self.graph_dict[smile] = mol_to_graph(mol)
+            
+        # protein info:
+        pro_info = json.load(open(path+ "/protein.json"))
+        
+        
+        # gen standard data
+        if not osp.exists(self.standard_fold_path):
+                os.mkdir(self.standard_fold_path)
+        self.cold_path = self.standard_fold_path +'/' + self.cold
+        if not osp.exists(self.cold_path):
+                os.mkdir(self.cold_path)
+                self.gen_08_cold(self.standard_fold_path + '/' + 'data.csv', self.cold)
+
+        # data used:
+        if self.cold == "std":
+            drug_id, target_id, self.labels = self.load_data(osp.join(self.standard_fold_path, self.cold, 'data_' + self.split + '.csv'))
+        else:
+            drug_id, target_id, self.labels = self.load_cold_data(self.standard_fold_path)
+        self.drug_smiles = [drug_info[d_id]['SMILES'] for d_id in drug_id]
+        self.pro_seqs = [pro_info[p_id]['sequence'] for p_id in target_id]
+        
+        # kg info:
+        #kg
+        # TODO: kg_path也得写到config中
+        kg_path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/BMKG-DP'
+        tokenizer = BertTokenizer.from_pretrained("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/")
+        # TODO: 这里名字重新起个名吧
+        model = PubMedBERT("/share/project/biomed/hk/hk/Open_DAIR_BioMed/pretrained_lm/pubmedbert_uncased/", dropout=0, dim_reduction=False).to(0)
+        bmkg = BMKG_DP(kg_path)
+        self.kg_enc = []
+        self.text_enc = []
+        cnt_d = 0
+        cnt_p = 0
+        for i, smi in enumerate(self.drug_smiles):
+            # print(i,smi)
+            seq = self.pro_seqs[i]
+            drug, drug_graph, drug_embedding = bmkg.get_drug(smi)
+            protein, protein_graph, protein_embedding = bmkg.get_protein(seq)
+            # TODO: 这里是None的
+            if drug == None:
+                text_d = ''
+                kg_d = np.zeros(256)
+            else:
+                cnt_d+=1
+                kg_d =drug_embedding
+                text_d = drug['text']
+
+            if protein == None:
+                kg_p = np.zeros(256)
+                text_p = ''
+            else:
+                cnt_p +=1
+                kg_p =protein_embedding
+                text_p = protein['text']
+                
+            # print('kg_p=============', kg_p.shape)
+            # print("kg_d==============", kg_d.shape)
+            
+            # TODO: kge直接concatenate了？
+            kg = np.concatenate((kg_d, kg_p), axis=0)
+            # print('kg===========',kg.shape)
+            self.kg_enc.append(kg)
+            text = trunc(text_d) + " [SEP] " + trunc(text_p)
+            text = tokenizer(text, max_length=512, truncation=True, return_tensors='pt')
+            text = model((text['input_ids'].to(0), text['attention_mask'].to(0))).detach().cpu()
+            self.text_enc.append(text)
+        print("all paires matched to kg: %d / %d drug; %d / %d protein" % (cnt_d, len(self.drug_smiles), cnt_p, len(self.pro_seqs)))
+            
+
+    def __getitem__(self, index):
+        smi = self.drug_smiles[index]
+        seq = self.pro_seqs[index]
+
+        x, edge_index = self.graph_dict[smi]
+        drug_fp = self.get_finger(smi)
+        prot_desc = self.get_ctd(seq)
+        
+        target = seqs2int(seq)
+        target_len = 1200
+        if len(target) < target_len:
+            target = np.pad(target, (0, target_len- len(target)))
+        else:
+            target = target[:target_len]
+        x=torch.FloatTensor(np.array(x))
+        edge_index=torch.LongTensor(edge_index).transpose(1, 0)
+        target=torch.LongTensor(np.array([target]))
+        
+        drug_fp = torch.FloatTensor(np.array([drug_fp]))
+        prot_desc = torch.FloatTensor(np.array([prot_desc]))
+        
+        kg_x = torch.FloatTensor(np.array([self.kg_enc[index]]))
+        text_x = self.text_enc[index]
+
+        y = torch.tensor(self.labels[index], dtype=torch.float)
+
+        data = Data(x=x, edge_index=edge_index, target=target,  y=y, drug_fp=drug_fp, prot_desc=prot_desc, kg=kg_x, text=text_x)     
+        return data
+
+    def __len__(self):
+        return len(self.drug_smiles)
+    
+    def get_finger(self, smile):
+        mols =Chem.MolFromSmiles(smile)
+        fp = AllChem.GetMorganFingerprintAsBitVect(mols,2,nBits=1024,)
+        fp = list(fp)
+        return fp
+
+    def get_ctd(self, seq):
+        ctd = CTD.CalculateCTD(seq).values()
+        protein_descriptor = list(ctd)
+        return protein_descriptor
+    
 
 
 import argparse
