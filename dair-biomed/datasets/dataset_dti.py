@@ -222,7 +222,8 @@ class KG(object):
             return (drug_use, drug_graph, drug_embedding)
         else:
             return (None, None, None)
-
+    
+    # TODO:这里还没有进行对比seq是否相同的逻辑
     def get_protein(self, seq, radius=2):
         try:
             protein = self.proteins_dict[seq]
@@ -683,6 +684,7 @@ class Davis_KIBA(Dataset):
         # path = '/share/project/biomed/hk/hk/Open_DAIR_BioMed/origin-data/davis'
         path = self.origin_datapath
 
+        # Y是一个矩阵，拿到有值的index
         Y = pickle.load(open(path + "/Y", "rb"), encoding='latin1')
         label_row_inds, label_col_inds = np.where(np.isnan(Y)==False)
 
@@ -858,18 +860,19 @@ class BMKG(Dataset):
         pro_info = json.load(open(path+ "/protein.json"))
         
         
-        # gen standard data
-        if not osp.exists(self.standard_fold_path):
-                os.mkdir(self.standard_fold_path)
-        self.cold_path = self.standard_fold_path +'/' + self.cold
-        if not osp.exists(self.cold_path):
-                os.mkdir(self.cold_path)
-                self.gen_08_cold(self.standard_fold_path + '/' + 'data.csv', self.cold)
+        
 
         # data used:
         if self.cold == "std":
-            drug_id, target_id, self.labels = self.load_data(osp.join(self.standard_fold_path, self.cold, 'data_' + self.split + '.csv'))
+            drug_id, target_id, self.labels = self.load_data(osp.join(self.origin_datapath, 'data_' + data_type + '.csv'))
         else:
+                # gen standard data
+            if not osp.exists(self.standard_fold_path):
+                    os.mkdir(self.standard_fold_path)
+            self.cold_path = self.standard_fold_path +'/' + self.cold
+            if not osp.exists(self.cold_path):
+                    os.mkdir(self.cold_path)
+                    self.gen_08_cold(self.standard_fold_path + '/' + 'data.csv', self.cold)
             drug_id, target_id, self.labels = self.load_cold_data(self.standard_fold_path)
         self.drug_smiles = [drug_info[d_id]['SMILES'] for d_id in drug_id]
         self.pro_seqs = [pro_info[p_id]['sequence'] for p_id in target_id]
@@ -964,7 +967,14 @@ class BMKG(Dataset):
         ctd = CTD.CalculateCTD(seq).values()
         protein_descriptor = list(ctd)
         return protein_descriptor
-    
+    def load_data(self, path):
+        drug_ids = np.loadtxt(path, dtype=str, skiprows=1, usecols=(0), comments="!", delimiter=',')
+        target_ids = np.loadtxt(path, dtype=str, skiprows=1, usecols=(1), comments="!", delimiter=',')
+        label = np.loadtxt(path, dtype=str, skiprows=1, usecols=(2), comments="!", delimiter=',')
+        # print("d id=", drug_ids[0])
+        # print("p id=", target_ids[0])
+        label = np.array([float(x) for x in label])
+        return drug_ids, target_ids, label
 
 
 import argparse
