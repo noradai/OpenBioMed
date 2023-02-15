@@ -1,14 +1,17 @@
-def roc_auc(y,pred):
-    fpr, tpr, thresholds = metrics.roc_curve(y, pred)
+import numpy as np
+import sklearn.metrics as metrics
+
+def roc_auc(y_true, y_pred):
+    fpr, tpr, _ = metrics.roc_curve(y_true, y_pred)
     roc_auc = metrics.auc(fpr, tpr)
     return roc_auc
 
-def pr_auc(y, pred):
-    precision, recall, thresholds = metrics.precision_recall_curve(y, pred)
+def pr_auc(y_true, y_pred):
+    precision, recall, _ = metrics.precision_recall_curve(y_true, y_pred)
     pr_auc = metrics.auc(recall, precision)
     return pr_auc
 
-def get_k(y_obs,y_pred):
+def get_k(y_obs, y_pred):
     y_obs = np.array(y_obs)
     y_pred = np.array(y_pred)
 

@@ -27,3 +27,9 @@ class AttentionDecoder(nn.Module):
         h = torch.cat((meta_feat, h), dim=-1)
         h = self.fc2(h).squeeze(1)
         return h
+
+class DeepEIK4DTI(nn.Module):
+
+class DeepEIK4DP(nn.Module):
+
+class DeepEIK4PPI(nn.Module):

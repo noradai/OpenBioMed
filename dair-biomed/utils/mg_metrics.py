@@ -128,5 +128,3 @@ if __name__ == '__main__':
     print(prec)
     print(reca)
     print(p_auc)
-
-# %%

@@ -1,4 +1,4 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 import logging
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,7 @@ from feat.drug_featurizer import SUPPORTED_DRUG_FEATUREIZER
 
 class DTIDataset(Dataset, ABC):
     def __init__(self, path, config):
-        super(DPGraphDataset, self).__init__()
+        super(DTIDataset, self).__init__()
         self.path = path
         self.config = config
         self.load_data(path)
@@ -43,10 +43,15 @@ class DTIDataset(Dataset, ABC):
                 for i in range(len(self.drugs)):
                     self.drugs[i].featurize(modality, featurizer)
 
-    def split(splitter='random'):
+    def split(self, splitter='random'):
+        pass
+
+    def get_data_loaders(self):
+        # return train_loader, valid_loader, test_loader
         pass
 
     def __getitem__(self, index):
+        # pyg Data(x=, y=, text_feat_drug, text_feat_protein, ...)
         pass
 
     def __len__(self):
