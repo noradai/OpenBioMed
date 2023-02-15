@@ -131,7 +131,7 @@ def main():
     test_csv = "test_fold0"
     
     if DATASET == "Y08":
-        # o8
+        # 08
         train_dataset = Yamanishi08(config, train_csv)
         logger.info(f"Number of train: {len(train_dataset)}")
         test_dataset = Yamanishi08(config, test_csv)
@@ -140,8 +140,14 @@ def main():
     # davis AND KIBA:
         train_dataset = Davis_KIBA(config, train_csv)
         logger.info(f"Number of train: {len(train_dataset)}")
+        # TODO: 这里为啥是train_csv?
         test_dataset = Davis_KIBA(config, train_csv)
         logger.info(f"Number of test: {len(test_dataset)}")
+    if DATASET == "BMKG":
+        # BMKG
+        train_dataset = BMKG(config, 'train')
+        logger.info(f"Number of train: {len(train_dataset)}")
+        test_dataset = BMKG(config, 'test')
     
     
     train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True, num_workers=2)
