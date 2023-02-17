@@ -4,11 +4,105 @@ import torch
 import rdkit.Chem as Chem
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data
-from dgllife.utils import *
 
-from base_featurizer import BaseFeaturizer
-from kg_featurizer import SUPPORTED_KG_FEATURIZER
-from text_featurizer import SUPPORTED_TEXT_FEATURIZER
+from feat.base_featurizer import BaseFeaturizer
+from feat.kg_featurizer import SUPPORTED_KG_FEATURIZER
+from feat.text_featurizer import SUPPORTED_TEXT_FEATURIZER
+
+def one_hot_encoding(x, allowable_set, encode_unknown=False):
+    """One-hot encoding.
+    """
+    if encode_unknown and (allowable_set[-1] is not None):
+        allowable_set.append(None)
+
+    if encode_unknown and (x not in allowable_set):
+        x = None
+
+    return list(map(lambda s: x == s, allowable_set))
+
+# Atom featurization: Borrowed from dgllife.utils.featurizers.py
+
+def atom_type_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the type of an atom.
+    """
+    if allowable_set is None:
+        allowable_set = ['C', 'N', 'O', 'S', 'F', 'Si', 'P', 'Cl', 'Br', 'Mg', 'Na', 'Ca',
+                         'Fe', 'As', 'Al', 'I', 'B', 'V', 'K', 'Tl', 'Yb', 'Sb', 'Sn',
+                         'Ag', 'Pd', 'Co', 'Se', 'Ti', 'Zn', 'H', 'Li', 'Ge', 'Cu', 'Au',
+                         'Ni', 'Cd', 'In', 'Mn', 'Zr', 'Cr', 'Pt', 'Hg', 'Pb']
+    return one_hot_encoding(atom.GetSymbol(), allowable_set, encode_unknown)
+
+def atom_degree_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the degree of an atom.
+    """
+    if allowable_set is None:
+        allowable_set = list(range(11))
+    return one_hot_encoding(atom.GetDegree(), allowable_set, encode_unknown)
+
+def atom_implicit_valence_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the implicit valence of an atom.
+    """
+    if allowable_set is None:
+        allowable_set = list(range(7))
+    return one_hot_encoding(atom.GetImplicitValence(), allowable_set, encode_unknown)
+
+def atom_formal_charge(atom):
+    """Get formal charge for an atom.
+    """
+    return [atom.GetFormalCharge()]
+
+def atom_num_radical_electrons(atom):
+    return [atom.GetNumRadicalElectrons()]
+
+def atom_hybridization_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the hybridization of an atom.
+    """
+    if allowable_set is None:
+        allowable_set = [Chem.rdchem.HybridizationType.SP,
+                         Chem.rdchem.HybridizationType.SP2,
+                         Chem.rdchem.HybridizationType.SP3,
+                         Chem.rdchem.HybridizationType.SP3D,
+                         Chem.rdchem.HybridizationType.SP3D2]
+    return one_hot_encoding(atom.GetHybridization(), allowable_set, encode_unknown)
+
+def atom_is_aromatic(atom):
+    """Get whether the atom is aromatic.
+    """
+    return [atom.GetIsAromatic()]
+
+def atom_total_num_H_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the total number of Hs of an atom.
+    """
+    if allowable_set is None:
+        allowable_set = list(range(5))
+    return one_hot_encoding(atom.GetTotalNumHs(), allowable_set, encode_unknown)
+
+def atom_is_in_ring(atom):
+    """Get whether the atom is in ring.
+    """
+    return [atom.IsInRing()]
+
+def atom_chirality_type_one_hot(atom, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the chirality type of an atom.
+    """
+    if not atom.HasProp('_CIPCode'):
+        return [False, False]
+
+    if allowable_set is None:
+        allowable_set = ['R', 'S']
+    return one_hot_encoding(atom.GetProp('_CIPCode'), allowable_set, encode_unknown)
+
+# Atom featurization: Borrowed from dgllife.utils.featurizers.py
+
+def bond_type_one_hot(bond, allowable_set=None, encode_unknown=False):
+    """One hot encoding for the type of a bond.
+    """
+    if allowable_set is None:
+        allowable_set = [Chem.rdchem.BondType.SINGLE,
+                         Chem.rdchem.BondType.DOUBLE,
+                         Chem.rdchem.BondType.TRIPLE,
+                         Chem.rdchem.BondType.AROMATIC]
+    return one_hot_encoding(bond.GetBondType(), allowable_set, encode_unknown)
 
 class DrugOneHotFeaturizer(BaseFeaturizer):
     smiles_char = ['?', '#', '%', ')', '(', '+', '-', '.', '1', '0', '3', '2', '5', '4',
@@ -98,7 +192,7 @@ class DrugTGSAFeaturizer(BaseFeaturizer):
         :return: list
         8 features are canonical, 2 features are from OGB
         """
-        featurizer_funcs = ConcatFeaturizer([
+        featurizer_funcs = [
             atom_type_one_hot,
             atom_degree_one_hot,
             atom_implicit_valence_one_hot,
@@ -109,8 +203,8 @@ class DrugTGSAFeaturizer(BaseFeaturizer):
             atom_total_num_H_one_hot,
             atom_is_in_ring,
             atom_chirality_type_one_hot,
-        ])
-        atom_feature = featurizer_funcs(atom)
+        ]
+        atom_feature = np.concatenate([func(atom) for func in featurizer_funcs], axis=0)
         return atom_feature
 
     def bond_feature(self, bond):
@@ -119,8 +213,8 @@ class DrugTGSAFeaturizer(BaseFeaturizer):
         :param mol: rdkit bond object
         :return: list
         """
-        featurizer_funcs = ConcatFeaturizer([bond_type_one_hot])
-        bond_feature = featurizer_funcs(bond)
+        featurizer_funcs = [bond_type_one_hot]
+        bond_feature = np.concatenate([func(bond) for func in featurizer_funcs], axis=0)
 
         return bond_feature
     

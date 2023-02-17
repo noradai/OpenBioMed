@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from drug_encoder import DrugGINTGSA
-from cell_encoder import CellGAT
-
+from models.drug_encoder import DrugGINTGSA
+from models.cell_encoder import CellGAT
 
 class TGDRP(nn.Module):
     def __init__(self, config):

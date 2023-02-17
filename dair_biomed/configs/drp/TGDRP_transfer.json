@@ -1,5 +1,5 @@
 {
-    "model": "TGSA",
+    "model": "TGDRP",
     "data": {
         "drug": {
             "modality": ["structure"],
@@ -11,17 +11,15 @@
         },
         "cell": {
             "gene_selector": "TGSA",
-            "gene_feature": ["EXP", "MUT", "CNV"],
+            "gene_feature": ["EXP"],
             "featurizer": {
                 "name": "TGSA",
                 "edge_threshold": 0.95 
             }
         },
         "split": {
-            "type": "random",
-            "train": 0.8,
-            "val": 0,
-            "test": 0.2
+            "type": "kfold",
+            "nfolds": 5
         }
     },
     "network": {

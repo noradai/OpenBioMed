@@ -3,7 +3,7 @@ import os.path as osp
 import pandas as pd
 import numpy as np
 
-from gene_select import hugo2ncbi
+from utils.gene_select import hugo2ncbi
 
 class KG(object):
     def  __init__(self):
@@ -35,15 +35,15 @@ class STRING(KG):
         #        sequence - amino acid sequence
         #        text     - description
         self.proteins = {}
-        self.hugo2ensp = {}
-        df = pd.read_csv(osp.join(path, "9606.protein.info.v11.0.txt"), sep=' ')
+        self.ncbi2ensp = {}
+        df = pd.read_csv(osp.join(path, "9606.protein.info.v11.0.txt"), sep='\t')
         for index, protein in df.iterrows():
             self.proteins[protein['protein_external_id']] = {
                 "kg_id": index,
                 "name": protein['preferred_name'],
                 "text": protein['annotation']
             }
-            self.hugo2ensp[protein['preferred_name']] = protein['protein_external_id']
+            self.ncbi2ensp[protein['preferred_name']] = protein['protein_external_id']
         # protein sequence
         with open(osp.join(path, "9606.protein.sequences.v11.0.fa"), 'r') as f:
             id, buf = None, ''
@@ -66,11 +66,12 @@ class STRING(KG):
 
     def node_subgraph(self, node_idx, format="hugo"):
         if format == "hugo":
-            node_idx = [self.hugo2ensp[x] for x in node_idx]
+            node_idx = [hugo2ncbi[x] for x in node_idx]
+        node_idx = [self.ncbi2ensp[x] if x in self.ncbi2ensp else x for x in node_idx]
         ensp2subgraphid = dict(zip(node_idx, range(len(node_idx))))
-        names_ensp = self.proteins.keys()
+        names_ensp = list(self.proteins.keys())
         edge_index = []
-        for i in self.edge_index:
+        for i in self.edges:
             p0, p1 = names_ensp[i[0]], names_ensp[i[1]]
             if p0 in node_idx and p1 in node_idx:
                 edge_index.append((ensp2subgraphid[p0], ensp2subgraphid[p1]))
@@ -89,7 +90,7 @@ def sample(graph, node_id, sampler):
     # node_id: the id of the center node
     # sampler: sampling strategy, e.g. ego-net
     ### Outputs:
-    # G': graph in pyg form (x, y, edge_index)
+    # G': graph in pyg Data(x, y, edge_index)
     pass
 
 def embed(graph, model='ProNE', dim=256):

@@ -22,7 +22,7 @@ class TGSAGeneSelector(GeneSelector):
     def __init__(self):
         super(TGSAGeneSelector, self).__init__()
         self.selected_index_hugo = []
-        with open("../datasets/drp/census706.txt", "r") as f:
+        with open("../datasets/drp/selected_genes.txt", "r") as f:
             line = f.readline().strip("\n").split(",")
             for index in line:
                 self.selected_index_hugo.append(index.lstrip('(').rstrip(')'))
@@ -30,7 +30,7 @@ class TGSAGeneSelector(GeneSelector):
     def __call__(self, genes, format="NCBI"):
         if format == "NCBI":
             genename2id = dict(zip(genes, range(len(genes))))
-            return np.array([genename2id[hugo2ncbi[x]] for x in self.selected_index_hugo])
+            return [genename2id[hugo2ncbi[x]] for x in self.selected_index_hugo]
 
 SUPPORTED_GENE_SELECTOR = {
     "TGSA": TGSAGeneSelector,

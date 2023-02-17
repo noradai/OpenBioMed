@@ -139,3 +139,5 @@ cython_debug/
 
 # Datasets
 /datasets/
+/dair_biomed/results/
+/logs/

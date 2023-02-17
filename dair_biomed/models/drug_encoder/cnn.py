@@ -35,5 +35,3 @@ class CNN(nn.Module):
         v = v.view(v.size(0), -1)
         v = self.fc1(v.float())
         return v
-
-class DrugCNN(nn.Module):

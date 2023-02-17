@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import torch
 
 import datetime
@@ -204,6 +205,14 @@ def load_model_dict(model, ckpt):
 
 def cycle(iterable):
     while True:
-        print("end")
         for x in iterable:
             yield x
+
+def metrics_average(results):
+    metrics = {key: [] for key in results[0]}
+    for result in results:
+        for key in result:
+            metrics[key].append(result[key])
+    for key in metrics:
+        metrics[key] = (np.mean(metrics[key]), np.std(metrics[key]))
+    return metrics
