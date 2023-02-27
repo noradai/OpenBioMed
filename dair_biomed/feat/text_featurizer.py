@@ -1,6 +1,19 @@
+from abc import ABC, abstractmethod
 from transformers import BertModel, BertTokenizer
 
 from feat.base_featurizer import BaseFeaturizer
+
+class TextFeaturizer(BaseFeaturizer, ABC):
+    def __init__(self):
+        super(TextFeaturizer).__init__()
+        self.transform = None
+
+    def set_transform(self, transform):
+        self.transform = transform
+
+    @abstractmethod
+    def __call__(self, data):
+        raise NotImplementedError
 
 class TextBertTokFeaturizer(BaseFeaturizer):
     def __init__(self, name, pretrained_model_name_or_path, max_length, **kwargs):
@@ -9,6 +22,8 @@ class TextBertTokFeaturizer(BaseFeaturizer):
         self.tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path)
 
     def __call__(self, data):
+        if self.transform is not None:
+            data = self.transform[data]
         return self.tokenizer(data, max_length=self.max_length, truncation=True, return_tensors='pt')
 
 class TextBertEncFeaturizer(BaseFeaturizer):
@@ -19,6 +34,8 @@ class TextBertEncFeaturizer(BaseFeaturizer):
         self.max_length = max_length
 
     def __call__(self, data):
+        if self.transform is not None:
+            data = self.transform[data]
         data = self.tokenizer(data, max_length=self.max_length, truncation=True, return_tensors='pt')
         return self.encoder(**data)[1]
 

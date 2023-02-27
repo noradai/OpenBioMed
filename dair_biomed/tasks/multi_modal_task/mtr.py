@@ -6,6 +6,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import argparse
+import json
 import math
 from tqdm import tqdm
 
@@ -14,8 +15,17 @@ from torch.autograd import Variable
 from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
+from torch.utils.data import RandomSampler
+from torch_geometric.data import DataLoader
 
 from utils import EarlyStopping, AverageMeter
+from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
+from models.drug_encoder import KVPLM, MoMu
+
+SUPPORTED_MTR_MODEL = {
+    "KVPLM": KVPLM, 
+    "MoMu": MoMu, 
+}
 
 def warmup_cosine(x, warmup=0.002):
     if x < warmup:
@@ -181,19 +191,6 @@ def contrastive_loss(logits_des, logits_smi, margin, device):
 
     return cost_des.sum() + cost_smi.sum()
 
-def add_arguments(parser):
-    parser.add_argument("--device", type=str, default="cuda:0")
-    parser.add_argument("--init_checkpoint", type=str, default="../checkpoints/MoMu-S.ckpt")
-    parser.add_argument("--mode", type=str, default="zero_shot")
-    parser.add_argument("--weight_decay", type=float, default=0)
-    parser.add_argument("--lr", type=float, default=5e-5)
-    parser.add_argument("--warmup", type=float, default=0.2)
-    parser.add_argument("--num_steps", type=int, default=5000)
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--epochs", type=int, default=30)
-    parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--margin", type=int, default=0.2)
-
 def train_mtr(train_loader, val_loader, model, args):
     loss_fn = contrastive_loss
     params = list(model.named_parameters())
@@ -221,14 +218,10 @@ def train_mtr(train_loader, val_loader, model, args):
         model.train()
         running_loss.reset()
 
-        for drug, text in tqdm(train_loader):
+        for drug in tqdm(train_loader):
             drug = drug.to(args.device)
-            if isinstance(text, dict):
-                text = {k: v.to(args.device) for k, v in text}
-            else:
-                text = text.to(args.device)
             drug_rep = model.encode_drug(drug)
-            text_rep = model.encode_text(text)
+            text_rep = model.encode_text(drug["text"])
             loss = loss_fn(drug_rep, text_rep)
             loss.backward()
             optimizer.zero_grad()
@@ -246,15 +239,11 @@ def val_mtr(val_loader, model, args):
     model.eval()
     drug_rep_total, text_rep_total = [], []
     acc_d2t, acc_t2d, n_samples = 0, 0, 0
-    for drug, text in tqdm(val_loader):
+    for drug in tqdm(val_loader):
         drug = drug.to(args.device)
-        if isinstance(text, dict):
-            text = {k: v.to(args.device) for k, v in text}
-        else:
-            text = text.to(args.device)
 
         drug_rep = model.encode_drug(drug)
-        text_rep = model.encode_text(text)
+        text_rep = model.encode_text(drug["text"])
         drug_rep_total.append(drug_rep.detach().cpu())
         text_rep_total.append(text_rep.detach().cpu())
 
@@ -290,6 +279,23 @@ def val_mtr(val_loader, model, args):
     }
     return result
 
+def add_arguments(parser):
+    parser.add_argument("--device", type=str, default="cuda:0")
+    parser.add_argument("--mode", type=str, default="zero_shot")
+    parser.add_argument("--config_path", type=str, default="")
+    parser.add_argument('--dataset', type=str, default='PCdes')
+    parser.add_argument("--dataset_path", type=str, default='../datasets/mtr/PCdes/')
+    parser.add_argument("--init_checkpoint", type=str, default="../checkpoints/MoMu-S.ckpt")
+    parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--weight_decay", type=float, default=0)
+    parser.add_argument("--lr", type=float, default=5e-5)
+    parser.add_argument("--warmup", type=float, default=0.2)
+    parser.add_argument("--num_steps", type=int, default=5000)
+    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--margin", type=int, default=0.2)
+
 if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -299,5 +305,22 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     add_arguments(parser)
-    parser.parse_args()
+    args = parser.parse_args()
 
+    dataset = SUPPORTED_MTR_DATASETS[args.dataset](args.dataset_path)
+    train_dataset = dataset.index_select(dataset.train_index)
+    val_dataset = dataset.index_select(dataset.val_index)
+    test_dataset = dataset.index_select(dataset.test_index)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+
+    config = json.load(open(args.config_path, "r"))    
+    model = SUPPORTED_MTR_MODEL[config["model"]](config)
+    model.load_state_dict(torch.load(args.init_checkpoint))
+    
+    if args.mode == "zero_shot":
+        val_mtr(test_loader, model, args)
+    elif args.mode == "train":
+        train_mtr(train_loader, model, args)
+        val_mtr(test_loader, model, args)

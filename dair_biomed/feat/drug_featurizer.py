@@ -268,9 +268,15 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
         if "structure" in config["modality"]:
             self.featurizers["structure"] = SUPPORTED_DRUG_FEATURIZER[config["featurizer"]["structure"]]()
         if "KG" in config["modality"]:
-            self.featurizers["KG"] = SUPPORTED_KG_FEATURIZER[config["featurizer"]["KG"]]
+            self.featurizers["KG"] = SUPPORTED_KG_FEATURIZER[config["featurizer"]["KG"]]()
         if "text" in config["modality"]:
-            self.featurizers["text"] = SUPPORTED_TEXT_FEATURIZER[config["featurizer"]["text"]]
+            self.featurizers["text"] = SUPPORTED_TEXT_FEATURIZER[config["featurizer"]["text"]]()
+
+    def set_drug2kgid_dict(self, drug2kgid):
+        self.featurizers["KG"].set_transform(drug2kgid)
+
+    def set_drug2text_dict(self, drug2text):
+        self.featurizers["text"].set_transform(drug2text)
 
     def __call__(self, data):
         feat = self.featurizers["structure"](data)

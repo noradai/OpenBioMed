@@ -1,0 +1,25 @@
+{
+    "model": "MoMu",
+    "data": {
+        "drug": {
+            "modality": ["structure", "text"],
+            "featurizer": {
+                "structure": {
+                    "name": "MoMu"
+                },
+                "text": {
+                    "name": "BertTokenizer"
+                }
+            }
+        }
+    },
+    "network": {
+        "gin_hidden_dim": 300,
+        "gin_num_layers": 5,
+        "drop_ratio": 0.0,
+        "graph_pooling": "sum",
+        "graph_self": false,
+        "bert_hidden_dim": 768,
+        "projection_dim": 256
+    }
+}
