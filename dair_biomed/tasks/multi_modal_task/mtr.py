@@ -15,10 +15,9 @@ from torch.autograd import Variable
 from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
-from torch.utils.data import RandomSampler
-from torch_geometric.data import DataLoader
+from torch.utils.data import DataLoader
 
-from utils import EarlyStopping, AverageMeter
+from utils import EarlyStopping, AverageMeter, DrugCollator, ToDevice
 from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
 from models.drug_encoder import KVPLM, MoMu
 
@@ -240,9 +239,10 @@ def val_mtr(val_loader, model, args):
     drug_rep_total, text_rep_total = [], []
     acc_d2t, acc_t2d, n_samples = 0, 0, 0
     for drug in tqdm(val_loader):
-        drug = drug.to(args.device)
+        drug = ToDevice(drug, args.device)
 
-        drug_rep = model.encode_drug(drug)
+
+        drug_rep = model.encode_drug(drug["structure"])
         text_rep = model.encode_text(drug["text"])
         drug_rep_total.append(drug_rep.detach().cpu())
         text_rep_total.append(text_rep.detach().cpu())
@@ -306,21 +306,25 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     add_arguments(parser)
     args = parser.parse_args()
+    config = json.load(open(args.config_path, "r"))
 
-    dataset = SUPPORTED_MTR_DATASETS[args.dataset](args.dataset_path)
+    dataset = SUPPORTED_MTR_DATASETS[args.dataset](args.dataset_path, config["data"])
     train_dataset = dataset.index_select(dataset.train_index)
     val_dataset = dataset.index_select(dataset.val_index)
     test_dataset = dataset.index_select(dataset.test_index)
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
+    collator = DrugCollator(config["data"]["drug"])
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collator)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
 
-    config = json.load(open(args.config_path, "r"))    
-    model = SUPPORTED_MTR_MODEL[config["model"]](config)
-    model.load_state_dict(torch.load(args.init_checkpoint))
+    model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
+    ckpt = torch.load(args.init_checkpoint)["state_dict"]
+    model.load_state_dict(ckpt)
+    model = model.to(args.device)
     
     if args.mode == "zero_shot":
-        val_mtr(test_loader, model, args)
+        result = val_mtr(test_loader, model, args)
+        print(result)
     elif args.mode == "train":
         train_mtr(train_loader, model, args)
         val_mtr(test_loader, model, args)

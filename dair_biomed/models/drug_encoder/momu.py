@@ -6,9 +6,25 @@ from transformers import BertConfig, BertModel
 
 from models.drug_encoder.pyg_gnn import PygGNN
 
+class TextEncoder(nn.Module):
+    def __init__(self, pretrained=True, model_name_or_path=None, dropout=0.0):
+        super(TextEncoder, self).__init__()
+        if pretrained:  # if use pretrained scibert model
+            self.main_model = BertModel.from_pretrained(model_name_or_path)
+        else:
+            config = BertConfig(vocab_size=31090, )
+            self.main_model = BertModel(config)
+
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, text):
+        output = self.main_model(**text)["pooler_output"]
+        logits = self.dropout(output)
+        return logits
+
 class MoMu(nn.Module):
     def __init__(self, config):
-        super().__init__()
+        super(MoMu, self).__init__()
 
         self.gin_hidden_dim = config["gin_hidden_dim"]
         self.gin_num_layers = config["gin_num_layers"]
@@ -18,7 +34,6 @@ class MoMu(nn.Module):
 
         self.bert_dropout = config["bert_dropout"]
         self.bert_hidden_dim = config["bert_hidden_dim"]
-        self.bert_pretrain = config["bert_pretrain"]
 
         self.projection_dim = config["projection_dim"]
 
@@ -30,8 +45,7 @@ class MoMu(nn.Module):
             JK='last',
         )
 
-        config = BertConfig(vocab_size=31090)
-        self.text_encoder = BertModel.from_pretrained('bert_pretrained')
+        self.text_encoder = TextEncoder(pretrained=False, dropout=self.bert_dropout)
 
         self.graph_proj_head = nn.Sequential(
             nn.Linear(self.gin_hidden_dim, self.gin_hidden_dim),
@@ -39,7 +53,6 @@ class MoMu(nn.Module):
             nn.Linear(self.gin_hidden_dim, self.projection_dim)
         )
         self.text_proj_head = nn.Sequential(
-            nn.Dropout(self.bert_dropout),
             nn.Linear(self.bert_hidden_dim, self.bert_hidden_dim),
             nn.ReLU(inplace=True),
             nn.Linear(self.bert_hidden_dim, self.projection_dim)

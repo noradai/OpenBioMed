@@ -3,12 +3,16 @@ import numpy as np
 
 ncbi2hugo = {}
 hugo2ncbi = {}
-with open("../datasets/drp/enterez_NCBI_to_hugo_gene_symbol_march_2019.txt", "r") as f:
-    for line in f.readlines():
-        line = line.strip("\n").split("\t")
-        if len(line) > 1:
-            ncbi2hugo[line[0]] = line[1]
-            hugo2ncbi[line[1]] = line[0]
+try:
+    with open("../datasets/drp/enterez_NCBI_to_hugo_gene_symbol_march_2019.txt", "r") as f:
+        for line in f.readlines():
+            line = line.strip("\n").split("\t")
+            if len(line) > 1:
+                ncbi2hugo[line[0]] = line[1]
+                hugo2ncbi[line[1]] = line[0]
+except:
+    print("NCBI2hugo gene not found")
+
 
 class GeneSelector(ABC):
     def __init__(self):

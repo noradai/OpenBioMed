@@ -141,3 +141,7 @@ cython_debug/
 /datasets/
 /dair_biomed/results/
 /logs/
+/ckpts
+/datasets
+/.vscode
+/nohup.out

@@ -15,23 +15,23 @@ class TextFeaturizer(BaseFeaturizer, ABC):
     def __call__(self, data):
         raise NotImplementedError
 
-class TextBertTokFeaturizer(BaseFeaturizer):
-    def __init__(self, name, pretrained_model_name_or_path, max_length, **kwargs):
+class TextBertTokFeaturizer(TextFeaturizer):
+    def __init__(self, config):
         super(TextBertTokFeaturizer, self).__init__()
-        self.max_length = max_length
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path)
+        self.max_length = config["max_length"]
+        self.tokenizer = BertTokenizer.from_pretrained(config["model_name_or_path"])
 
     def __call__(self, data):
         if self.transform is not None:
             data = self.transform[data]
-        return self.tokenizer(data, max_length=self.max_length, truncation=True, return_tensors='pt')
+        return self.tokenizer(data, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt').data
 
-class TextBertEncFeaturizer(BaseFeaturizer):
-    def __init__(self, name, pretrained_model_name_or_path, max_length, **kwargs):
+class TextBertEncFeaturizer(TextFeaturizer):
+    def __init__(self, config):
         super(TextBertEncFeaturizer, self).__init__()
-        self.tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path)
-        self.encoder = BertModel.from_pretrained(pretrained_model_name_or_path)
-        self.max_length = max_length
+        self.tokenizer = BertTokenizer.from_pretrained(config["model_name_or_path"])
+        self.encoder = BertModel.from_pretrained(config["model_name_or_path"])
+        self.max_length = config["max_length"]
 
     def __call__(self, data):
         if self.transform is not None:
