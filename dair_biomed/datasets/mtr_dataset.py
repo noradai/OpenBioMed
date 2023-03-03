@@ -5,8 +5,10 @@ from abc import ABC, abstractmethod
 import logging
 logger = logging.getLogger(__name__)
 
+import os
 import os.path as osp
 import copy
+import random
 
 import rdkit.Chem as Chem
 import numpy as np
@@ -63,19 +65,60 @@ class PCdes(MTRDataset):
             try:
                 mol = Chem.MolFromSmiles(drug)
                 if mol is not None:
-                    self.drugs.append(drug)
-                    self.texts.append(texts[i])
+                    self.drugs.append(drug.strip("\n"))
+                    self.texts.append(texts[i].strip("\n"))
             except:
                 print("2D graph generating error")
 
         self.drug2text = dict(zip(self.drugs, self.texts))
-        print(len(self))
+        logger.info("Num Samples: %d" % len(self))
 
     def _train_test_split(self):
         self.train_index = np.arange(0, 10500)
         self.val_index = np.arange(10500, 12000)
         self.test_index = np.arange(12000, len(self.drugs))
 
+class PubChem15K(MTRDataset):
+    def __init__(self, path, config):
+        super(PubChem15K, self).__init__(path, config)
+        self._train_test_split()
+
+    def _load_data(self):
+        random.seed(42)
+        self.drugs, self.texts = [], []
+        with open(os.path.join(self.path, "pair.txt")) as f:
+            for line in f.readlines():
+                line = line.rstrip("\n").split("\t")
+                text_name, smi = line[0], line[1]
+                try:
+                    mol = Chem.MolFromSmiles(smi)
+                    if mol is not None:
+                        self.drugs.append(smi)
+                        text_list = []
+                        count = 0
+                        for line in open(os.path.join(self.path, "text", "text_" + text_name + ".txt"), 'r', encoding='utf-8'):
+                            count += 1
+                            text_list.append(line)
+                            if count > 500:
+                                break
+                        #text = random.sample(text_list, 1)[0]
+                        text = text_list[0]
+                        if len(text) > 256:
+                            text = text[:256]
+                        self.texts.append(text)
+                        print(smi, text)
+                except:
+                    continue
+                if len(self.drugs) >= 480:
+                    break
+        self.drug2text = dict(zip(self.drugs, self.texts))
+
+    def _train_test_split(self):
+        self.train_index = np.arange(0, 480)
+        self.val_index = np.arange(0, 480)
+        self.test_index = np.arange(0, 480)
+
 SUPPORTED_MTR_DATASETS = {
     "PCdes": PCdes,
+    "PubChem15K": PubChem15K,
 }

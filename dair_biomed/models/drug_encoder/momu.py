@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from transformers import BertConfig, BertModel
 
-from models.drug_encoder.pyg_gnn import PygGNN
+from models.drug_encoder.momu_gnn import PygGNN
 
 class TextEncoder(nn.Module):
     def __init__(self, pretrained=True, model_name_or_path=None, dropout=0.0):
@@ -76,8 +76,8 @@ class MoMu(nn.Module):
 
         return logits_per_graph, logits_per_text, loss
 
-    def encode_drug(self, drug):
-        h = self.graph_encoder(drug)
+    def encode_structure(self, structure):
+        h, _ = self.graph_encoder(structure)
         return self.graph_proj_head(h)
 
     def encode_text(self, text):

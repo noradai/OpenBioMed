@@ -145,3 +145,4 @@ cython_debug/
 /datasets
 /.vscode
 /nohup.out
+/assets

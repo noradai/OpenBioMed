@@ -12,18 +12,22 @@ from tqdm import tqdm
 
 import torch
 from torch.autograd import Variable
+from torch.utils.data import DataLoader
 from torch.optim import Optimizer
 from torch.optim.optimizer import required
 from torch.nn.utils import clip_grad_norm_
-from torch.utils.data import DataLoader
 
 from utils import EarlyStopping, AverageMeter, DrugCollator, ToDevice
 from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
-from models.drug_encoder import KVPLM, MoMu
+from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT, DrugDeepEIK
 
 SUPPORTED_MTR_MODEL = {
-    "KVPLM": KVPLM, 
+    "SciBERT": DrugBERT,
+    "KV-PLM": KVPLM, 
+    "KV-PLM*": KVPLM,
     "MoMu": MoMu, 
+    "MolALBEF": MolALBEF,
+    "DeepEIK": DrugDeepEIK
 }
 
 def warmup_cosine(x, warmup=0.002):
@@ -201,14 +205,15 @@ def train_mtr(train_loader, val_loader, model, args):
         'params': [p for n, p in params if any(nd in n for nd in no_decay)],
         'weight_decay': 0.0
     }]
+    #optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.lr)
     optimizer = BertAdam(
-        optimizer_grouped_parameters, 
-        weight_decay=args.weight_decay,
+        optimizer_grouped_parameters,
+        weight_decay=0,
         lr=args.lr,
         warmup=args.warmup,
-        t_total=args.total_steps
+        t_total=len(train_loader) * args.epochs,
     )
-    stopper = EarlyStopping(mode="higher", patience=args.patience)
+    stopper = EarlyStopping(mode="higher", patience=args.patience, filename=args.output_path)
 
     running_loss = AverageMeter()
     for epoch in range(args.epochs):
@@ -217,21 +222,28 @@ def train_mtr(train_loader, val_loader, model, args):
         model.train()
         running_loss.reset()
 
+        step = 0
         for drug in tqdm(train_loader):
-            drug = drug.to(args.device)
-            drug_rep = model.encode_drug(drug)
+            drug = ToDevice(drug, args.device)
+            #print(drug["structure"], drug["text"])
+            drug_rep = model.encode_structure(drug["structure"])
             text_rep = model.encode_text(drug["text"])
-            loss = loss_fn(drug_rep, text_rep)
+            loss = loss_fn(drug_rep, text_rep, margin=args.margin, device=args.device)
             loss.backward()
-            optimizer.zero_grad()
             optimizer.step()
+            optimizer.zero_grad()
 
             running_loss.update(loss.detach().cpu().item())
-        logger.info("Average training loss %.4lf" % (running_loss.get_average()))
+            step += 1
+            if step % args.log_every == 0:
+                logger.info("Steps=%d Training Loss=%.4lf" % (step, running_loss.get_average()))
+                running_loss.reset()
 
         val_metrics = val_mtr(val_loader, model, args)
+        logger.info(", ".join(["val %s: %.4lf" % (k, val_metrics[k]) for k in val_metrics]))
         if stopper.step((val_metrics["acc@1_d2t"] + val_metrics["acc@1_t2d"]), model):
             break
+    model.load_state_dict(torch.load(args.output_path)["model_state_dict"])
     return model
 
 def val_mtr(val_loader, model, args):
@@ -241,8 +253,7 @@ def val_mtr(val_loader, model, args):
     for drug in tqdm(val_loader):
         drug = ToDevice(drug, args.device)
 
-
-        drug_rep = model.encode_drug(drug["structure"])
+        drug_rep = model.encode_structure(drug["structure"])
         text_rep = model.encode_text(drug["text"])
         drug_rep_total.append(drug_rep.detach().cpu())
         text_rep_total.append(text_rep.detach().cpu())
@@ -285,16 +296,20 @@ def add_arguments(parser):
     parser.add_argument("--config_path", type=str, default="")
     parser.add_argument('--dataset', type=str, default='PCdes')
     parser.add_argument("--dataset_path", type=str, default='../datasets/mtr/PCdes/')
-    parser.add_argument("--init_checkpoint", type=str, default="../checkpoints/MoMu-S.ckpt")
+    parser.add_argument("--init_checkpoint", type=str, default="")
+    parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/finetune.pth")
+    parser.add_argument("--param_key", type=str, default="state_dict")
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0)
     parser.add_argument("--lr", type=float, default=5e-5)
-    parser.add_argument("--warmup", type=float, default=0.2)
-    parser.add_argument("--num_steps", type=int, default=5000)
-    parser.add_argument("--batch_size", type=int, default=64)
+    parser.add_argument("--warmup", type=float, default=0.03)
+    parser.add_argument("--train_batch_size", type=int, default=32)
+    parser.add_argument("--val_batch_size", type=int, default=64)
     parser.add_argument("--epochs", type=int, default=30)
+    parser.add_argument("--patience", type=int, default=10)
+    parser.add_argument("--log_every", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--margin", type=int, default=0.2)
+    parser.add_argument("--margin", type=float, default=0.2)
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -313,18 +328,20 @@ if __name__ == "__main__":
     val_dataset = dataset.index_select(dataset.val_index)
     test_dataset = dataset.index_select(dataset.test_index)
     collator = DrugCollator(config["data"]["drug"])
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collator)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
+    train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collator)
+    val_loader = DataLoader(val_dataset, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
+    test_loader = DataLoader(test_dataset, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
 
     model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
-    ckpt = torch.load(args.init_checkpoint)["state_dict"]
-    model.load_state_dict(ckpt)
+    if args.init_checkpoint != "":
+        ckpt = torch.load(args.init_checkpoint)[args.param_key]
+        model.load_state_dict(ckpt)
     model = model.to(args.device)
     
     if args.mode == "zero_shot":
         result = val_mtr(test_loader, model, args)
         print(result)
     elif args.mode == "train":
-        train_mtr(train_loader, model, args)
-        val_mtr(test_loader, model, args)
+        train_mtr(train_loader, val_loader, model, args)
+        result = val_mtr(test_loader, model, args)
+        print(result)

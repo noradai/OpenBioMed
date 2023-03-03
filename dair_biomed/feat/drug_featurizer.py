@@ -10,6 +10,7 @@ from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data
+from transformers import BertTokenizer
 
 from feat.base_featurizer import BaseFeaturizer
 from feat.kg_featurizer import SUPPORTED_KG_FEATURIZER
@@ -138,6 +139,49 @@ class DrugOneHotFeaturizer(BaseFeaturizer):
         else:
             temp = temp [:self.max_len]
         return self.enc.transform(np.array(temp).reshape(-1, 1)).toarray().T
+
+class DrugBERTTokFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(DrugBERTTokFeaturizer, self).__init__()
+        self.max_length = config["max_length"]
+        self.tokenizer = BertTokenizer.from_pretrained(config["model_name_or_path"])
+
+    def __call__(self, data):
+        result = self.tokenizer(data, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
+        return result.data
+
+class DrugBPEFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(DrugBPEFeaturizer, self).__init__()
+
+        from subword_nmt.apply_bpe import BPE, read_vocabulary
+        import codecs
+
+        self.bpe = BPE(
+            codecs.open(config["code_name"], encoding="utf8"), 
+            vocab=read_vocabulary(codecs.open(config["vocabulary"], encoding="utf8"), config["vocabulary_threshold"]),
+            separator="~~", 
+        )
+        self.vocabs = {}
+        lines = open(config["vocabulary"], "r").readlines()
+        for line in lines:
+            wd = line.strip('\n').split(' ')
+            self.vocabs[wd[0]] = len(self.vocabs)
+        self.max_length = config["max_length"]
+
+    def __call__(self, data):
+        bpe_result = self.bpe.process_line(data).split(" ")
+        result = [self.vocabs[x] if x in self.vocabs else len(self.vocabs) for x in bpe_result]
+        if len(result) > self.max_length - 2:
+            result = result[:self.max_length - 2]
+        input_ids = torch.LongTensor([102] + [i + 30700 for i in result] + [103] + [0] * (self.max_length - 2 - len(result)))
+        attn_mask = torch.LongTensor([1] * (len(result) + 2) + [0] * (self.max_length - len(result) - 2))
+        token_type_ids = torch.zeros_like(attn_mask).long()
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attn_mask,
+            "token_type_ids": token_type_ids
+        }
 
 """
 class MolCLRFeaturizer(BaseFeaturizer):
@@ -347,7 +391,7 @@ class DrugGraphFeaturizer(BaseFeaturizer):
                 ]
             else:
                 atom_feature = [
-                    self.allowable_features['possible_atomic_num_list'].index(atom.GetAtomicNum()),
+                    safe_index(self.allowable_features['possible_atomic_num_list'], atom.GetAtomicNum()),
                     self.allowable_features['possible_chirality_list'].index(atom.GetChiralTag())
                 ]
             atom_features_list.append(atom_feature)
@@ -419,9 +463,12 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
 
 SUPPORTED_DRUG_FEATURIZER = {
     "OneHot": DrugOneHotFeaturizer,
+    "KV-PLM*": DrugBPEFeaturizer,
+    "bert": DrugBERTTokFeaturizer,
     #"molclr": DrugMolCLRFeaturizer,
     "TGSA": DrugTGSAFeaturizer,
     "ogb": DrugGraphFeaturizer,
+    "graphmvp": DrugGraphFeaturizer,
     "MultiModal": DrugMultiModalFeaturizer,
 }
 
@@ -429,3 +476,13 @@ if __name__ == "__main__":
     smi = "CCC=O"
     data = DrugGraphFeaturizer({"name": "ogb"})(smi)
     print(data.x, data.edge_index, data.edge_attr)
+
+    smi = "[Cl].CCCNCCOCOC=CC=CC=CC=CC=C"
+    data = DrugBPEFeaturizer({
+        "name": "KV-PLM*",
+        "code_name": "../assets/KV-PLM*/bpe_coding.txt",
+        "vocabulary": "../assets/KV-PLM*/bpe_vocab.txt",
+        "vocabulary_threshold": 80,
+        "max_length": 32
+    })(smi)
+    print(data)

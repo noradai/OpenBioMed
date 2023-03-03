@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 from abc import ABC, abstractmethod
 import numpy as np
 
@@ -11,7 +14,7 @@ try:
                 ncbi2hugo[line[0]] = line[1]
                 hugo2ncbi[line[1]] = line[0]
 except:
-    print("NCBI2hugo gene not found")
+    logger.warn("NCBI2hugo gene not found")
 
 
 class GeneSelector(ABC):
