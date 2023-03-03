@@ -15,8 +15,7 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-from feat.drug_featurizer import SUPPORTED_DRUG_FEATURIZER, DrugMultiModalFeaturizer
-from feat.text_featurizer import SUPPORTED_TEXT_FEATURIZER
+from feat.drug_featurizer import DrugMultiModalFeaturizer
 
 class MTRDataset(Dataset, ABC):
     def __init__(self, path, config):

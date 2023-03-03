@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 from transformers import BertConfig, BertModel
 
-from models.drug_encoder.momu_gnn import PygGNN
+from models.drug_encoder.momu_gnn import MoMuGNN
 
 class TextEncoder(nn.Module):
     def __init__(self, pretrained=True, model_name_or_path=None, dropout=0.0):
@@ -37,7 +37,7 @@ class MoMu(nn.Module):
 
         self.projection_dim = config["projection_dim"]
 
-        self.graph_encoder = PygGNN(
+        self.graph_encoder = MoMuGNN(
             num_layer=self.gin_num_layers,
             emb_dim=self.gin_hidden_dim,
             gnn_type='gin',

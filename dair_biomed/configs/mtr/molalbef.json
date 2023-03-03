@@ -5,7 +5,7 @@
             "modality": ["structure", "text"],
             "featurizer": {
                 "structure": {
-                    "name": "graphmvp"
+                    "name": "BaseGNN"
                 },
                 "text": {
                     "name": "BertTokenizer",

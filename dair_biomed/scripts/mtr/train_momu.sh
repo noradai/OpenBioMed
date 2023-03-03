@@ -10,6 +10,7 @@ python tasks/multi_modal_task/mtr.py \
 --dataset_path ../datasets/mtr/PCdes \
 --config_path ./configs/mtr/momu.json \
 --init_checkpoint ../ckpts/fusion_ckpts/momu/MoMu-K.ckpt \
+--param_key state_dict \
 --num_workers 1 \
 --mode train \
 --epochs 100 \

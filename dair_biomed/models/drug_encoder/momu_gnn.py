@@ -210,7 +210,7 @@ class GraphSAGEConv(MessagePassing):
 
 
 
-class PygGNN(torch.nn.Module):
+class MoMuGNN(torch.nn.Module):
     """
     Args:
         num_layer (int): the number of GNN layers
@@ -224,11 +224,12 @@ class PygGNN(torch.nn.Module):
         node representations
 
     """
-    def __init__(self, num_layer, emb_dim, JK = "last", drop_ratio = 0, gnn_type = "gin"):
-        super(PygGNN, self).__init__()
+    def __init__(self, num_layer, emb_dim, JK = "last", drop_ratio = 0, gnn_type = "gin", **kwargs):
+        super(MoMuGNN, self).__init__()
         self.num_layer = num_layer
         self.drop_ratio = drop_ratio
         self.JK = JK
+        self.output_dim = emb_dim
 
         if self.num_layer < 2:
             raise ValueError("Number of GNN layers must be greater than 1.")

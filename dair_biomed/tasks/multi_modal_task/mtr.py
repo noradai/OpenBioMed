@@ -298,7 +298,7 @@ def add_arguments(parser):
     parser.add_argument("--dataset_path", type=str, default='../datasets/mtr/PCdes/')
     parser.add_argument("--init_checkpoint", type=str, default="")
     parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/finetune.pth")
-    parser.add_argument("--param_key", type=str, default="state_dict")
+    parser.add_argument("--param_key", type=str, default="")
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0)
     parser.add_argument("--lr", type=float, default=5e-5)
@@ -334,7 +334,9 @@ if __name__ == "__main__":
 
     model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
     if args.init_checkpoint != "":
-        ckpt = torch.load(args.init_checkpoint)[args.param_key]
+        ckpt = torch.load(args.init_checkpoint, map_location="cpu")
+        if args.param_key != "":
+            ckpt = ckpt[args.param_key]
         model.load_state_dict(ckpt)
     model = model.to(args.device)
     

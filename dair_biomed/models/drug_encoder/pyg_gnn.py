@@ -197,6 +197,7 @@ class PygGNN(nn.Module):
         self.drop_ratio = drop_ratio
         self.num_layer = num_layer
         self.JK = JK
+        self.output_dim = emb_dim
 
         self.x_embedding1 = nn.Embedding(num_atom_type, emb_dim)
         self.x_embedding2 = nn.Embedding(num_chirality_tag, emb_dim)

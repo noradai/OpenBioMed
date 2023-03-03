@@ -4,7 +4,7 @@
 #SBATCH --gres gpu:a100:1
 #SBATCH --time 12:00:00 
 #SBATCH --output ../logs/momu_zero_shot.log
-MODEL="kvplm_star"
+MODEL="kvplm"
 
 python tasks/multi_modal_task/mtr.py \
 --device cuda:0 \
