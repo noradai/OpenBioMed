@@ -2,19 +2,25 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import argparse
+import copy
+import json
+import pickle
 import numpy as np
 import torch
 
 import rdkit.Chem as Chem
+from rdkit.Chem import DataStructs, rdmolops
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 from sklearn.preprocessing import OneHotEncoder
 from torch_geometric.data import Data
-from transformers import BertTokenizer
+from transformers import BertTokenizer, T5Tokenizer
 
 from feat.base_featurizer import BaseFeaturizer
 from feat.kg_featurizer import SUPPORTED_KG_FEATURIZER
 from feat.text_featurizer import SUPPORTED_TEXT_FEATURIZER
+from utils import to_clu_sparse
 
 def one_hot_encoding(x, allowable_set, encode_unknown=False):
     """One-hot encoding.
@@ -140,15 +146,20 @@ class DrugOneHotFeaturizer(BaseFeaturizer):
             temp = temp [:self.max_len]
         return self.enc.transform(np.array(temp).reshape(-1, 1)).toarray().T
 
-class DrugBERTTokFeaturizer(BaseFeaturizer):
+class DrugTransformerTokFeaturizer(BaseFeaturizer):
+    name2tokenizer = {
+        "bert": BertTokenizer,
+        "t5": T5Tokenizer
+    }
+
     def __init__(self, config):
-        super(DrugBERTTokFeaturizer, self).__init__()
+        super(DrugTransformerTokFeaturizer, self).__init__()
         self.max_length = config["max_length"]
-        self.tokenizer = BertTokenizer.from_pretrained(config["model_name_or_path"])
+        self.tokenizer = self.name2tokenizer[config["transformer_type"]].from_pretrained(config["model_name_or_path"], model_max_length=self.max_length)
 
     def __call__(self, data):
-        result = self.tokenizer(data, max_length=self.max_length, padding='max_length', truncation=True, return_tensors='pt')
-        return result.data
+        result = self.tokenizer(data, max_length=self.max_length, padding=True, truncation=True)
+        return result
 
 class DrugBPEFeaturizer(BaseFeaturizer):
     def __init__(self, config):
@@ -169,7 +180,16 @@ class DrugBPEFeaturizer(BaseFeaturizer):
             self.vocabs[wd[0]] = len(self.vocabs)
         self.max_length = config["max_length"]
 
+    def _preprocess_smiles(self, data):
+        data = data.replace('(', '')
+        data = data.replace(')', '')
+        for i in range(10):
+            item = str(i)
+            data = data.replace(item, '')
+        return data
+
     def __call__(self, data):
+        data = self._preprocess_smiles(data)
         bpe_result = self.bpe.process_line(data).split(" ")
         result = [self.vocabs[x] if x in self.vocabs else len(self.vocabs) for x in bpe_result]
         if len(result) > self.max_length - 2:
@@ -182,6 +202,24 @@ class DrugBPEFeaturizer(BaseFeaturizer):
             "attention_mask": attn_mask,
             "token_type_ids": token_type_ids
         }
+
+class DrugFPFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(DrugFPFeaturizer, self).__init__()
+        self.config = config
+
+    def __call__(self, data):
+        mol = Chem.MolFromSmiles(data)
+        if mol is not None:
+            fp = Chem.RDKFingerprint(mol, fpSize=self.config["fpsize"])
+            np_fp = np.zeros(self.config["fpsize"])
+            DataStructs.ConvertToNumpyArray(fp, np_fp)
+            if self.config["return_type"] == "pt":
+                return torch.tensor(np_fp)
+            else:
+                return np_fp
+        else:
+            return None
 
 class DrugTGSAFeaturizer(BaseFeaturizer):
     def __init__(self, config):
@@ -316,7 +354,10 @@ class DrugGraphFeaturizer(BaseFeaturizer):
         self.config = config
 
     def __call__(self, data):
-        mol = Chem.MolFromSmiles(data)
+        if isinstance(data, str):
+            mol = Chem.MolFromSmiles(data)
+        else:
+            mol = data
         # atoms
         atom_features_list = []
         for atom in mol.GetAtoms():
@@ -376,6 +417,129 @@ class DrugGraphFeaturizer(BaseFeaturizer):
         data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
 
         return data
+
+class DrugGGNNFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(DrugGGNNFeaturizer, self).__init__()
+        self.max_n_atoms = config["max_n_atoms"]
+        self.atomic_num_list = config["atomic_num_list"]
+        self.bond_type_list = [
+            Chem.rdchem.BondType.SINGLE,
+            Chem.rdchem.BondType.DOUBLE,
+            Chem.rdchem.BondType.TRIPLE,
+            'misc'
+        ]
+
+    def __call__(self, data):
+        if isinstance(data, str):
+            mol = Chem.MolFromSmiles(data)
+        else:
+            mol = data
+        Chem.Kekulize(mol)
+        x = self._construct_atomic_number_array(mol, self.max_n_atoms)
+        adj = self._construct_adj_matrix(mol, self.max_n_atoms)
+        return x, adj, self._rescale_adj(adj) 
+
+    def _construct_atomic_number_array(self, mol, out_size=-1):
+        """Returns atomic numbers of atoms consisting a molecule.
+
+        Args:
+            mol (rdkit.Chem.Mol): Input molecule.
+            out_size (int): The size of returned array.
+                If this option is negative, it does not take any effect.
+                Otherwise, it must be larger than the number of atoms
+                in the input molecules. In that case, the tail of
+                the array is padded with zeros.
+
+        Returns:
+            torch.tensor: a tensor consisting of atomic numbers
+                of atoms in the molecule.
+        """
+
+        atom_list = [a.GetAtomicNum() for a in mol.GetAtoms()]
+        if len(atom_list) > self.max_n_atoms:
+            atom_list =  atom_list[:self.max_n_atoms]
+
+        if out_size < 0:
+            result = torch.zeros(len(atom_list), len(self.atomic_num_list))
+        else:
+            result = torch.zeros(out_size, len(self.atomic_num_list))
+        for i, atom in enumerate(atom_list):
+            result[i, safe_index(self.atomic_num_list, atom)] = 1
+        for i in range(len(atom_list), self.max_n_atoms):
+            result[i, -1] = 1
+        return result
+
+    def _construct_adj_matrix(self, mol, out_size=-1, self_connection=True):
+        """Returns the adjacent matrix of the given molecule.
+
+        This function returns the adjacent matrix of the given molecule.
+        Contrary to the specification of
+        :func:`rdkit.Chem.rdmolops.GetAdjacencyMatrix`,
+        The diagonal entries of the returned matrix are all-one.
+
+        Args:
+            mol (rdkit.Chem.Mol): Input molecule.
+            out_size (int): The size of the returned matrix.
+                If this option is negative, it does not take any effect.
+                Otherwise, it must be larger than the number of atoms
+                in the input molecules. In that case, the adjacent
+                matrix is expanded and zeros are padded to right
+                columns and bottom rows.
+            self_connection (bool): Add self connection or not.
+                If True, diagonal element of adjacency matrix is filled with 1.
+
+        Returns:
+            adj (torch.tensor): The adjacent matrix of the input molecule.
+                It is 2-dimensional tensor with shape (atoms1, atoms2), where
+                atoms1 & atoms2 represent from and to of the edge respectively.
+                If ``out_size`` is non-negative, the returned
+                its size is equal to that value. Otherwise,
+                it is equal to the number of atoms in the the molecule.
+        """
+
+        if out_size < 0:
+            adj = torch.zeros(4, mol.GetNumAtoms(), mol.GetNumAtoms())
+        else:
+            adj = torch.zeros(4, out_size, out_size)
+        for bond in mol.GetBonds():
+            i = bond.GetBeginAtomIdx()
+            j = bond.GetEndAtomIdx()
+            adj[safe_index(self.bond_type_list, bond.GetBondType()), i, j] = 1
+            adj[safe_index(self.bond_type_list, bond.GetBondType()), j, i] = 1
+        adj[3] = 1 - torch.sum(adj[:3], dim=0)
+        return adj
+
+    def _rescale_adj(self, adj):
+        # Previous paper didn't use rescale_adj.
+        # In their implementation, the normalization sum is: num_neighbors = F.sum(adj, axis=(1, 2))
+        # In this implementation, the normaliztion term is different
+        # raise NotImplementedError
+        # (256,4,9, 9):
+        # 4: single, double, triple, and bond between disconnected atoms (negative mask of sum of previous)
+        # 1-adj[i,:3,:,:].sum(dim=0) == adj[i,4,:,:]
+        # usually first 3 matrices have no diagnal, the last has.
+        # A_prime = self.A + sp.eye(self.A.shape[0])
+        num_neighbors = adj.sum(dim=(0, 1)).float()
+        num_neighbors_inv = num_neighbors.pow(-1)
+        num_neighbors_inv[num_neighbors_inv == float('inf')] = 0
+        adj_prime = num_neighbors_inv[None, None, :] * adj
+        return adj_prime
+
+class DrugMultiScaleFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(DrugMultiScaleFeaturizer, self).__init__()
+        self.scales = config["scales"]
+        self.featurizers = {}
+        for scale in config["scales"]:
+            conf = config[scale]
+            self.featurizers[scale] = SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER[conf["name"]](conf)
+
+    def __call__(self, data):
+        feat = {}
+        for scale in self.scales:
+            feat[scale] = self.featurizers[scale](data)
+        return feat
     
 class DrugMultiModalFeaturizer(BaseFeaturizer):
     def __init__(self, config):
@@ -384,7 +548,7 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
         self.featurizers = {}
         if "structure" in config["modality"]:
             conf = config["featurizer"]["structure"]
-            self.featurizers["structure"] = SUPPORTED_DRUG_FEATURIZER[conf["name"]](conf)
+            self.featurizers["structure"] = SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER[conf["name"]](conf)
         if "KG" in config["modality"]:
             conf = config["featurizer"]["KG"]
             self.featurizers["KG"] = SUPPORTED_KG_FEATURIZER[conf["name"]](conf)
@@ -400,27 +564,42 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
 
     def __call__(self, data):
         feat = {}
-        for modality in self.modality:
+        for modality in self.featurizers.keys():
             feat[modality] = self.featurizers[modality](data)
         return feat
 
-SUPPORTED_DRUG_FEATURIZER = {
+SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "OneHot": DrugOneHotFeaturizer,
     "KV-PLM*": DrugBPEFeaturizer,
-    "bert": DrugBERTTokFeaturizer,
-    #"molclr": DrugMolCLRFeaturizer,
+    "transformer": DrugTransformerTokFeaturizer,
+    "fp": DrugFPFeaturizer,
     "TGSA": DrugTGSAFeaturizer,
     "ogb": DrugGraphFeaturizer,
     "BaseGNN": DrugGraphFeaturizer,
-    "MultiModal": DrugMultiModalFeaturizer,
 }
 
-if __name__ == "__main__":
+SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER = copy.deepcopy(SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER)
+SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER["MultiScale"] = DrugMultiScaleFeaturizer
+
+SUPPORTED_DRUG_FEATURIZER = copy.deepcopy(SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER)
+SUPPORTED_DRUG_FEATURIZER["MultiModal"] = DrugMultiModalFeaturizer
+
+def add_arguments(parser):
+    parser.add_argument("--mode", type=str, choices=["unit_test", "interactive", "file"])
+    parser.add_argument("--featurizer", type=str, default="fp")
+    parser.add_argument("--config_file", type=str, default="")
+    parser.add_argument("--smiles_file", type=str, default="")
+    parser.add_argument("--output_file", type=str, default="")
+    parser.add_argument("--post_transform", type=str, default="")
+
+    return parser
+
+def unit_test():
     smi = "CCC=O"
     data = DrugGraphFeaturizer({"name": "ogb"})(smi)
     print(data.x, data.edge_index, data.edge_attr)
 
-    smi = "[Cl].CCCNCCOCOC=CC=CC=CC=CC=C"
+    smi = "C(C(C(=O)O)N)C(C(=O)O)O"
     data = DrugBPEFeaturizer({
         "name": "KV-PLM*",
         "code_name": "../assets/KV-PLM*/bpe_coding.txt",
@@ -429,3 +608,32 @@ if __name__ == "__main__":
         "max_length": 32
     })(smi)
     print(data)
+
+def featurize_file(args):
+    with open(args.smiles_file, "r") as f:
+        smis = [line.rstrip("\n") for line in f.readlines()]
+    config = json.load(open(args.config_file, "r"))
+    featurizer = SUPPORTED_DRUG_FEATURIZER[args.featurizer](config)
+    result = [featurizer(smi) for smi in smis]
+    if args.post_transform == "to_clu":
+        result = to_clu_sparse(np.array(result))
+        with open(args.output_file, "w") as f:
+            f.write(result)
+    else:
+        pickle.dump(result, open(args.output_file, "wb"))
+
+def run_featurize(args):
+    # TODO: implement command line tool for featurizing SMILES
+    raise NotImplementedError
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser = add_arguments(parser)
+    args = parser.parse_args()
+
+    if args.mode == "unit_test":
+        unit_test()
+    elif args.mode == "file":
+        featurize_file(args)
+    elif args.mode == "interactive":
+        run_featurize(args)

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 import os.path as osp
 import pandas as pd
 import numpy as np
+import pickle
 
 from utils.gene_select import hugo2ncbi
 
@@ -19,6 +20,21 @@ class BMKG(KG):
         self.load_drugs(open(osp.join(path, "drug.json")))
         self.load_proteins(open(osp.join(path, "protein.json")))
         self.load_edges(open(osp.join(path, "edge.csv")))
+
+class BMKGv2(KG):
+    def __init__(self, path):
+        super(BMKGv2, self).__init__()
+        self.kg = pickle.load(open(path, "rb"))
+        self.adj = {}
+        for triplet in self.kg["triplets"]:
+            if triplet[0] not in self.adj:
+                self.adj[triplet[0]] = [triplet]
+            else:
+                self.adj[triplet[0]].append(triplet)
+            if triplet[2] not in self.adj:
+                self.adj[triplet[2]] = [triplet]
+            else:
+                self.adj[triplet[2]].append(triplet)
 
 class STRING(KG):
     def __init__(self, path, thresh=0.95):

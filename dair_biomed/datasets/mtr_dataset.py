@@ -11,11 +11,14 @@ import copy
 import random
 
 import rdkit.Chem as Chem
+from rdkit import RDLogger
+RDLogger.DisableLog("rdApp.*")
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
 from feat.drug_featurizer import DrugMultiModalFeaturizer
+from utils.split import scaffold_split
 
 class MTRDataset(Dataset, ABC):
     def __init__(self, path, config):
@@ -47,7 +50,11 @@ class MTRDataset(Dataset, ABC):
         return len(self.drugs)
 
 class PCdes(MTRDataset):
-    def __init__(self, path, config):
+    def __init__(self, path, config, mode='paragraph', filter=True, filter_path=""):
+        self.filter = filter
+        self.filter_path = filter_path
+        self.test = False
+        self.mode = mode
         super(PCdes, self).__init__(path, config)
         self._train_test_split()
 
@@ -58,24 +65,55 @@ class PCdes(MTRDataset):
         with open(osp.join(self.path, "align_des_filt3.txt"), "r") as f:
             texts = f.readlines()[:len(drugs)]
 
+        if self.filter:
+            with open(self.filter_path, "r") as f:
+                filter_drugs = []
+                for line in f.readlines():
+                    drug = line.rstrip("\n").split("\t")[1]
+                    mol = Chem.MolFromSmiles(drug)
+                    if mol is not None:
+                        filter_drugs.append(Chem.MolToSmiles(mol, isomericSmiles=True))
+
         self.drugs = []
         self.texts = []
         for i, drug in enumerate(drugs):
             try:
-                mol = Chem.MolFromSmiles(drug)
-                if mol is not None:
-                    self.drugs.append(drug.strip("\n"))
+                mol = Chem.MolFromSmiles(drug.strip("\n"))
+                smi = Chem.MolToSmiles(mol, isomericSmiles=True)
+                if mol is not None and not smi in filter_drugs:
+                    self.drugs.append(smi)
                     self.texts.append(texts[i].strip("\n"))
             except:
-                print("2D graph generating error")
+                logger.warn("fail to generate 2D graph, data removed")
 
+        self.smiles = self.drugs
         self.drug2text = dict(zip(self.drugs, self.texts))
         logger.info("Num Samples: %d" % len(self))
 
     def _train_test_split(self):
-        self.train_index = np.arange(0, 10500)
-        self.val_index = np.arange(10500, 12000)
-        self.test_index = np.arange(12000, len(self.drugs))
+        self.train_index, self.val_index, self.test_index = scaffold_split(self, 0.1, 0.2)
+
+    def set_test(self):
+        self.test = True
+        if self.mode == "sentence":
+            rnd = 42
+            self.pseudorandom = []
+            for i in range(len(self)):
+                self.pseudorandom.append(rnd)
+                rnd = rnd * 16807 % ((1 << 31) - 1)
+
+    def __getitem__(self, index):
+        if self.mode == "sentence":
+            if not self.test:
+                ind = random.randint(0, len(self.drugs[index]["text"]) - 1)
+            else:
+                ind = self.pseudorandom[index] % len(self.drugs[index]["text"])
+            return {
+                "structure": self.drugs[index]["structure"],
+                "text": self.drugs[index]["text"][ind],
+            }
+        else:
+            return self.drugs[index]
 
 class PubChem15K(MTRDataset):
     def __init__(self, path, config):

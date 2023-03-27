@@ -76,9 +76,15 @@ class MoMu(nn.Module):
 
         return logits_per_graph, logits_per_text, loss
 
-    def encode_structure(self, structure):
+    def encode_structure(self, structure, proj=True):
         h, _ = self.graph_encoder(structure)
-        return self.graph_proj_head(h)
+        if proj:
+            h = self.graph_proj_head(h)
+        return h
+
+    def encode_structure_with_prob(self, structure, x, atomic_num_list, device):
+        h, _ = self.graph_encoder(structure, x, atomic_num_list, device)
+        return self.graph_proj_head(h) 
 
     def encode_text(self, text):
         h = self.text_encoder(text)

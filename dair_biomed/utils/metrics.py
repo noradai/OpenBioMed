@@ -47,3 +47,9 @@ def squared_error_zero(y_obs,y_pred):
     down= sum((y_obs - y_obs_mean)*(y_obs - y_obs_mean))
 
     return 1 - (upp / float(down))
+
+def recall_at_k(sorted, index, k):
+    for i in range(min(len(sorted), k)):
+        if sorted[i] == index:
+            return 1
+    return 0

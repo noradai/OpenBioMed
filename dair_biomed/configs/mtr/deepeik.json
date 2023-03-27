@@ -5,7 +5,7 @@
             "modality": ["structure", "text"],
             "featurizer": {
                 "structure": {
-                    "name": "ogb"
+                    "name": "BaseGNN"
                 },
                 "text": {
                     "name": "BertTokenizer",
@@ -17,11 +17,11 @@
     },
     "network": {
         "structure": {
-            "name": "graphcl",
+            "name": "graphmvp",
             "emb_dim": 300,
             "num_layer": 5,
             "dropout": 0.1,
-            "init_checkpoint": "../ckpts/gnn_ckpts/graphcl/graphcl_80.pth"
+            "init_checkpoint": "../ckpts/gnn_ckpts/graphmvp/pretraining_model.pth"
         },
         "text": {
             "config_name_or_path": "./configs/mtr/kvplm_bert_config.json",

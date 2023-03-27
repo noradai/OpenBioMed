@@ -6,4 +6,5 @@ from utils.utils import *
 from utils.metrics import *
 from utils.gene_select import *
 from utils.kg_utils import *
+from utils.matrix_utils import *
 from utils.collators import *

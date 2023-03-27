@@ -261,15 +261,25 @@ class MoMuGNN(torch.nn.Module):
 
     #def forward(self, x, edge_index, edge_attr):
     def forward(self, *argv):
+        x_prob = None
         if len(argv) == 3:
             x, edge_index, edge_attr = argv[0], argv[1], argv[2]
         elif len(argv) == 1:
             data = argv[0]
             x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
+        elif len(argv) == 4:
+            data = argv[0]
+            x, edge_index, edge_attr, batch = data.x, data.edge_index, data.edge_attr, data.batch
+            x_prob = argv[1]
+            atomic_num_list = argv[2]
+            device = argv[3]
         else:
             raise ValueError("unmatched number of arguments.")
-
-        x = self.x_embedding1(x[:,0]) + self.x_embedding2(x[:,1])
+        
+        if x_prob is not None:
+            x = torch.matmul(x_prob[:, :-1], self.x_embedding1(torch.tensor(atomic_num_list[:-1]).to(device) - 1)) + torch.matmul(x_prob[:, -1:], self.x_embedding1(torch.arange(119, 120).to(device))) + self.x_embedding2(x[:, 1])
+        else:
+            x = self.x_embedding1(x[:, 0]) + self.x_embedding2(x[:, 1])
 
         h_list = [x]
         for layer in range(self.num_layer):

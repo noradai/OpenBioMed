@@ -6,11 +6,13 @@
 #SBATCH --output ../logs/momu_zero_shot.log
 MODEL="molalbef"
 MOL="graphmvp"
+MODE="sentence"
 
 python tasks/multi_modal_task/mtr.py \
 --device cuda:0 \
 --dataset PCdes \
 --dataset_path ../datasets/mtr/PCdes \
+--dataset_mode ${MODE} \
 --config_path ./configs/mtr/$MODEL.json \
 --init_checkpoint ../ckpts/fusion_ckpts/${MODEL}-${MOL}/checkpoint_299.pth \
 --output_path ../ckpts/finetune_ckpts/${MODEL}-${MOL}-finetune.pth \

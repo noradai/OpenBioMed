@@ -5,6 +5,6 @@ python tasks/multi_modal_task/mtr.py \
 --dataset_path ../datasets/mtr/PCdes \
 --config_path ./configs/mtr/deepeik.json \
 --num_workers 1 \
---mode train \
+--mode zero_shot \
 --epochs 100 \
 --patience 10

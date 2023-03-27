@@ -4,17 +4,12 @@
         "drug": {
             "modality": ["structure", "text"],
             "featurizer": {
-                "structure_backup": {
+                "structure": {
                     "name": "KV-PLM*",
                     "code_name": "../assets/KV-PLM*/bpe_coding.txt",
                     "vocabulary": "../assets/KV-PLM*/bpe_vocab.txt",
                     "vocabulary_threshold": 80,
                     "max_length": 32
-                },
-                "structure": {
-                    "name": "bert",
-                    "max_length": 64,
-                    "model_name_or_path": "../ckpts/bert_ckpts/scibert_scivocab_uncased"
                 },
                 "text": {
                     "name": "BertTokenizer",
@@ -25,6 +20,7 @@
         }
     },
     "network": {
+        "name": "KV-PLM*",
         "bert_config_path": "./configs/mtr/kvplm_bert_config.json",
         "checkpoint_path": "../ckpts/bert_ckpts/kvplm/ckpt_KV_1.pt",
         "dropout": 0.1

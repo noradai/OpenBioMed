@@ -1,14 +1,14 @@
 {
-    "model": "MolALBEF",
+    "model": "MoMu",
     "data": {
         "drug": {
             "modality": ["structure", "text"],
             "featurizer": {
                 "structure": {
-                    "name": "BaseGNN"
+                    "name": "ogb"
                 },
                 "text": {
-                    "name": "BertTokenizer",
+                    "name": "TransformerTokenizer",
                     "max_length": 128,
                     "model_name_or_path": "../ckpts/bert_ckpts/scibert_scivocab_uncased"
                 }
@@ -19,15 +19,10 @@
         "gin_hidden_dim": 300,
         "gin_num_layers": 5,
         "drop_ratio": 0.0,
-        "bert_config_path": "./configs/mtr/kvplm_bert_config.json",
-        "max_n_nodes": 64,
-        "projection_dim": 256,
-        "kge1": {
-            "n_ents": 49111,
-            "n_rels": 16,
-            "norm": 1,
-            "hidden_size": 256,
-            "margin": 1.0
-        }
+        "graph_pooling": "sum",
+        "graph_self": false,
+        "bert_dropout": 0.0,
+        "bert_hidden_dim": 768,
+        "projection_dim": 256
     }
 }
