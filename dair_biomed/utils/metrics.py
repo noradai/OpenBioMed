@@ -17,11 +17,20 @@ def get_k(y_obs, y_pred):
 
     return sum(y_obs * y_pred) / float(sum(y_pred * y_pred))
 
-def get_rm2(ys_orig, ys_line):
+def rm2_index(ys_orig, ys_line):
     r2 = r_squared_error(ys_orig, ys_line)
     r02 = squared_error_zero(ys_orig, ys_line)
 
     return r2 * (1 - np.sqrt(np.absolute((r2 * r2)-(r02 * r02))))
+
+def concordance_index(gt, pred):
+    gt_mask = gt.reshape((1, -1)) > gt.reshape((-1, 1))
+    diff = pred.reshape((1, -1)) - pred.reshape((-1, 1))
+    h_one = (diff > 0)
+    h_half = (diff == 0)
+    CI = np.sum(gt_mask * h_one * 1.0 + gt_mask * h_half * 0.5) / np.sum(gt_mask)
+
+    return CI
 
 def r_squared_error(y_obs, y_pred):
     y_obs = np.array(y_obs)
@@ -37,13 +46,13 @@ def r_squared_error(y_obs, y_pred):
 
     return mult / float(y_obs_sq * y_pred_sq)
 
-def squared_error_zero(y_obs,y_pred):
-    k = get_k(y_obs,y_pred)
+def squared_error_zero(y_obs, y_pred):
+    k = get_k(y_obs, y_pred)
 
     y_obs = np.array(y_obs)
     y_pred = np.array(y_pred)
     y_obs_mean = [np.mean(y_obs) for y in y_obs]
-    upp = sum((y_obs - (k*y_pred)) * (y_obs - (k* y_pred)))
+    upp = sum((y_obs - (k * y_pred)) * (y_obs - (k * y_pred)))
     down= sum((y_obs - y_obs_mean)*(y_obs - y_obs_mean))
 
     return 1 - (upp / float(down))
@@ -53,3 +62,12 @@ def recall_at_k(sorted, index, k):
         if sorted[i] == index:
             return 1
     return 0
+
+def metrics_average(results):
+    metrics = {key: [] for key in results[0]}
+    for result in results:
+        for key in result:
+            metrics[key].append(result[key])
+    for key in metrics:
+        metrics[key] = (np.mean(metrics[key]), np.std(metrics[key]))
+    return metrics

@@ -229,12 +229,3 @@ def cycle(iterable):
     while True:
         for x in iterable:
             yield x
-
-def metrics_average(results):
-    metrics = {key: [] for key in results[0]}
-    for result in results:
-        for key in result:
-            metrics[key].append(result[key])
-    for key in metrics:
-        metrics[key] = (np.mean(metrics[key]), np.std(metrics[key]))
-    return metrics

@@ -133,9 +133,9 @@ class DrugOneHotFeaturizer(BaseFeaturizer):
        'Y', '[', 'Z', ']', '_', 'a', 'c', 'b', 'e', 'd', 'g', 'f', 'i',
        'h', 'm', 'l', 'o', 'n', 's', 'r', 'u', 't', 'y']
 
-    def __init__(self, max_len=256):
+    def __init__(self, config):
         super(DrugOneHotFeaturizer, self).__init__()
-        self.max_len = max_len
+        self.max_len = config["max_len"]
         self.enc = OneHotEncoder().fit(np.array(self.smiles_char).reshape(-1, 1))
 
     def __call__(self, data):
@@ -144,7 +144,7 @@ class DrugOneHotFeaturizer(BaseFeaturizer):
             temp = temp + ['?'] * (self.max_len - len(temp))
         else:
             temp = temp [:self.max_len]
-        return self.enc.transform(np.array(temp).reshape(-1, 1)).toarray().T
+        return torch.tensor(self.enc.transform(np.array(temp).reshape(-1, 1)).toarray().T)
 
 class DrugTransformerTokFeaturizer(BaseFeaturizer):
     name2tokenizer = {

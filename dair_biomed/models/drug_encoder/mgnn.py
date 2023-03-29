@@ -111,6 +111,7 @@ class DenseBlock(nn.ModuleDict):
 class MGNN(nn.Module):
     def __init__(self, num_input_features, out_dim, growth_rate=32, block_config = (3, 3, 3, 3), bn_sizes=[2, 3, 4, 4]):
         super().__init__()
+        self.output_dim = out_dim
         self.features = nn.Sequential(OrderedDict([('conv0', GraphConvBn(num_input_features, 32))]))
         num_input_features = 32
 

@@ -109,7 +109,7 @@ class GraphEnhancedMolCapModel(nn.Module):
             encoder_attention_mask = mol["structure"]["SMILES"]["attention_mask"]
         return h, encoder_attention_mask
 
-def train_molcap(train_loader, val_loader, model, args, device):
+def train_molcap(train_loader, val_loader, test_loader, test_dataset, model, args, device):
     requires_grad = []
     for k, v in model.named_parameters():
         if v.requires_grad:
@@ -126,7 +126,7 @@ def train_molcap(train_loader, val_loader, model, args, device):
         logger.info("Training...")
         #model.train()
 
-        for mol in tqdm(train_loader):
+        for mol in train_loader:
             mol = ToDevice(mol, device)
             loss = model(mol)
             optimizer.zero_grad()
@@ -141,8 +141,9 @@ def train_molcap(train_loader, val_loader, model, args, device):
         val_molcap(val_loader, model, device)
         #if stopper.step(val_molcap(val_loader, model, device), model):
         #    break
-        if epoch % 20 == 0:
+        if (epoch + 1) % 10 == 0:
             torch.save({'model_state_dict': model.state_dict()}, os.path.join(args.output_path, "checkpoint_" + str(epoch) + ".pth"))
+            print(test_molcap(test_dataset, test_loader, model, args, device))
     #model.load_state_dict(torch.load(args.output_path)["model_state_dict"])
     return model
 
@@ -151,7 +152,7 @@ def val_molcap(val_loader, model, device):
     val_loss = 0
 
     logger.info("Validating...")
-    for mol in tqdm(val_loader):
+    for mol in val_loader:
         mol = ToDevice(mol, device)
         loss = model(mol)
         val_loss += loss.detach().cpu().item()
@@ -269,22 +270,14 @@ if __name__ == "__main__":
     model = model.to(device)
 
     if args.mode == "train":
-        train_molcap(train_dataloader, val_dataloader, model, args, device)
+        train_molcap(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
     elif args.mode == "test":
         if os.path.exists(args.output_path):
-            """
             state_dict = torch.load(args.output_path, map_location=device)["model_state_dict"]
             model.load_state_dict(state_dict)
-            """
-            state_dict = torch.load("/root/MoleculeCaption/saved_models/gint5_smiles2caption_small.pt", map_location=device)
-            new_state_dict = {}
-            for k, v in state_dict.items():
-                if k.startswith("graph_projector"):
-                    new_state_dict[k.lstrip("graph_projector.")] = v
-            model.graph_projector.load_state_dict(new_state_dict)
         results = test_molcap(test_dataset, test_dataloader, model, args, device)
         print(results)
     elif args.mode == "traintest":
-        train_molcap(train_dataloader, val_dataloader, model, args, device)
+        train_molcap(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
         results = test_molcap(test_dataset, test_dataloader, model, args, device)
         print(results)

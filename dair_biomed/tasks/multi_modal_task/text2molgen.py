@@ -45,7 +45,7 @@ def generate_mol(z, decoder, featurizer, device):
     return mol, x
 
 def optimize_z(z, anchor, text_feat, encoder, decoder, structure_featurizer, args, device):
-    optimizer = torch.optim.Adam([z.requires_grad_()], lr=0.1)
+    optimizer = torch.optim.Adam([z.requires_grad_()], lr=0.01)
     schedular = torch.optim.lr_scheduler.StepLR(optimizer, args.optimize_steps, gamma=0.1)
 
     running_loss_text = AverageMeter()
@@ -142,15 +142,18 @@ if __name__ == "__main__":
     decoder = SUPPORTED_DRUG_DECODER[decoder_config["model"]](decoder_config["network"])
 
     if args.technique == "z_optimize":
+
         anchor = Chem.MolFromSmiles("CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1")
         print("anchor: CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1 log_p:", Descriptors.MolLogP(anchor))
         img = Draw.MolsToGridImage([anchor], legends=['CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1'],
                                            molsPerRow=1, subImgSize=(300, 300))
         img.save(os.path.join(args.save_path, 'anchor.png'))
+
+        #anchor = None
         featurizer = DrugGGNNFeaturizer({"max_n_atoms": 38, "atomic_num_list": atomic_num_list})
         x, adj, normalized_adj = featurizer(anchor)
         z_dim = decoder.a_size + decoder.b_size
-        #mean = torch.zeros(1, z_dim)
+        mean = torch.zeros(1, z_dim)
         std = torch.ones(1, z_dim) * math.sqrt(math.exp(decoder.ln_var.item())) * args.temperature
         
         encoder.eval()
@@ -160,6 +163,7 @@ if __name__ == "__main__":
         encoder.to(device)
         decoder.to(device)
 
+
         with torch.no_grad():
             x = x.unsqueeze(0).to(device)
             adj = adj.unsqueeze(0).to(device)
@@ -167,6 +171,7 @@ if __name__ == "__main__":
             z_init, _ = decoder(adj, x, normalized_adj)
             z_init = torch.cat((z_init[0].view(1, -1), z_init[1].view(1, -1)), dim=1)
             mean = z_init.detach().cpu()
+
 
         mols = {}
         for i, text in enumerate(dataset.texts):

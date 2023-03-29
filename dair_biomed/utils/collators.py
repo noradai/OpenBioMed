@@ -19,22 +19,10 @@ def ToDevice(obj, device):
     else:
         return obj.to(device)
 
-class DrugCollator(object):
+class BaseCollator(object):
     def __init__(self, config):
         self.config = config
         self._build(config)
-
-    def __call__(self, drugs):
-        if len(self.config["modality"]) > 1:
-            batch = {}
-            for modality in self.config["modality"]:
-                if isinstance(drugs[0][modality], list):
-                    batch[modality] = self._collate_multiple([drug[modality] for drug in drugs], self.config["featurizer"][modality])
-                else:
-                    batch[modality] = self._collate_single([drug[modality] for drug in drugs], self.config["featurizer"][modality])
-        else:
-            batch = self._collate_single(drugs)
-        return batch
 
     def _collate_single(self, data, config):
         if isinstance(data[0], Data):
@@ -70,6 +58,37 @@ class DrugCollator(object):
         for key in config:
             self._build(config[key])
 
+class DrugCollator(BaseCollator):
+    def __init__(self, config):
+        self.config = config
+        self._build(config)
+
+    def __call__(self, drugs):
+        if len(self.config["modality"]) > 1:
+            batch = {}
+            for modality in self.config["modality"]:
+                batch[modality] = self._collate_single([drug[modality] for drug in drugs], self.config["featurizer"][modality])
+        else:
+            batch = self._collate_single(drugs)
+        return batch
+
+class ProteinCollator(BaseCollator):
+    def __init__(self, config):
+        super(ProteinCollator, self).__init__(config)
+        self.config = config
+
+    def __call__(self, proteins):
+        if len(self.config["modality"]) > 1:
+            batch = {}
+            for modality in self.config["modality"]:
+                if isinstance(proteins[0][modality], list):
+                    batch[modality] = self._collate_multiple([drug[modality] for drug in proteins], self.config["featurizer"][modality])
+                else:
+                    batch[modality] = self._collate_single([drug[modality] for drug in proteins], self.config["featurizer"][modality])
+        else:
+            batch = self._collate_single(proteins)
+        return batch
+
 class DPCollator(object):
     def __init__(self, config):
         self.config = config
@@ -78,3 +97,13 @@ class DPCollator(object):
     def __call__(self, data):
         drugs, labels = map(list, zip(*data))
         return self.drug_collator(drugs), torch.stack(labels)
+
+class DTICollator(object):
+    def __init__(self, config):
+        self.config = config
+        self.drug_collator = DrugCollator(config["drug"])
+        self.protein_collator = ProteinCollator(config["protein"])
+
+    def __call__(self, data):
+        drugs, prots, labels = map(list, zip(*data))
+        return self.drug_collator(drugs), self.protein_collator(prots), torch.stack(labels)

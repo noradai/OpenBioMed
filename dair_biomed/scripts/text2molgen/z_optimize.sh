@@ -1,5 +1,5 @@
 #!/bin/bash
-ENCODER="momu"
+ENCODER="molalbef"
 DECODER="moflow"
 DEVICE="cuda:0"
 
@@ -25,9 +25,9 @@ python tasks/multi_modal_task/text2molgen.py \
 --encoder_param_key ${ENCODER_PARAM_KEY} \
 --decoder_config_path ./configs/text2molgen/${DECODER}.json \
 --dataset prompt \
---temperature 0 \
+--temperature 0.05 \
 --rounds_per_text 5 \
---optimize_steps 500 \
+--optimize_steps 100 \
 --logging_steps 100 \
 --lambd 0.5 \
 --evaluate \

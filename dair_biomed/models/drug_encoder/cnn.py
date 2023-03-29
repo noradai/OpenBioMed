@@ -2,20 +2,23 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-from collections import OrderedDict
 
 class CNN(nn.Module):
-    def __init__(self, in_ch, kernels):
+    def __init__(self, config):
         super(CNN, self).__init__()
-        layer_size = len(in_ch) - 1
+        self.output_dim = config["output_dim"]
+        
+        layer_size = len(config["in_ch"]) - 1
         self.conv = nn.ModuleList(
             [nn.Conv1d(
-                in_channels = in_ch[i], 
-                out_channels = in_ch[i + 1], 
-                kernel_size = kernels[i]
+                in_channels = config["in_ch"][i], 
+                out_channels = config["in_ch"][i + 1], 
+                kernel_size = config["kernels"][i]
             ) for i in range(layer_size)]
         )
         self.conv = self.conv.double()
+        hidden_dim = self._get_conv_output((config["vocab_size"], config["max_length"]))
+        self.fc1 = nn.Linear(hidden_dim, config["output_dim"])
 
     def _get_conv_output(self, shape):
         bs = 1

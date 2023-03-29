@@ -1,8 +1,15 @@
+import logging
+logger = logging.getLogger(__name__)
+
 from abc import ABC, abstractmethod
-import os.path as osp
+import os
+import json
 import pandas as pd
 import numpy as np
 import pickle
+import torch
+
+from rdkit import Chem
 
 from utils.gene_select import hugo2ncbi
 
@@ -14,13 +21,49 @@ class KG(object):
     def __str__(self):
         raise NotImplementedError
 
+    @abstractmethod
+    def link(self, dataset):
+        raise NotImplementedError
+
 class BMKG(KG):
     def __init__(self, path):
         super(BMKG, self).__init__()
-        self.load_drugs(open(osp.join(path, "drug.json")))
-        self.load_proteins(open(osp.join(path, "protein.json")))
-        self.load_edges(open(osp.join(path, "edge.csv")))
+        self.drugs = json.load(open(os.path.join(path, "drug.json"), "r"))
+        self.smi2drugid = {}
+        for key in self.drugs:
+            smi = Chem.MolToSmiles(Chem.MolFromSmiles(self.drugs[key]["SMILES"]), isomericSmiles=True)
+            self.smi2drugid[smi] = key
 
+        self.proteins = json.load(open(os.path.join(path, "protein.json"), "r"))
+        self.seq2proteinid = {}
+        for key in self.proteins:
+            self.seq2proteinid[self.proteins[key]["sequence"]] = key
+
+        df = pd.read_csv(os.path.join(path, "edge.csv"))
+        self.edges = []
+        for row in df.iterrows():
+            self.edges.append((row["x_id"], row["end_id"], row["relation"]))
+
+    def link(self, dataset):
+        drug2kg, drug2text = {}, {}
+        for smi in dataset.smiles:
+            iso_smi = Chem.MolToSmiles(Chem.MolFromSmiles(smi), isomericSmiles=True)
+            if iso_smi in self.smi2drugid:
+                drug2kg[smi] = self.smi2drugid[smi]
+                drug2text[smi] = self.drugs[self.smi2drugid[smi]]["text"]
+            else:
+                drug2kg[smi] = -1
+                drug2text[smi] = "No descriptions available."
+        protein2kg, protein2text = {}, {}
+        for seq in dataset.proteins:
+            if seq in self.seq2proteinid:
+                protein2kg[seq] = self.seq2proteinid[seq]
+                protein2text[seq] = self.proteins[self.seq2proteinid[seq]]["text"]
+            else:
+                protein2kg[seq] = -1
+                protein2text[seq] = "No descriptions available."
+        return drug2kg, drug2text, protein2kg, protein2text
+ 
 class BMKGv2(KG):
     def __init__(self, path):
         super(BMKGv2, self).__init__()
@@ -52,7 +95,7 @@ class STRING(KG):
         #        text     - description
         self.proteins = {}
         self.ncbi2ensp = {}
-        df = pd.read_csv(osp.join(path, "9606.protein.info.v11.0.txt"), sep='\t')
+        df = pd.read_csv(os.path.join(path, "9606.protein.info.v11.0.txt"), sep='\t')
         for index, protein in df.iterrows():
             self.proteins[protein['protein_external_id']] = {
                 "kg_id": index,
@@ -61,7 +104,7 @@ class STRING(KG):
             }
             self.ncbi2ensp[protein['preferred_name']] = protein['protein_external_id']
         # protein sequence
-        with open(osp.join(path, "9606.protein.sequences.v11.0.fa"), 'r') as f:
+        with open(os.path.join(path, "9606.protein.sequences.v11.0.fa"), 'r') as f:
             id, buf = None, ''
             for line in f.readlines():
                 if line.startswith('>'):
@@ -73,7 +116,7 @@ class STRING(KG):
                     buf = buf + line.rstrip("\n")
             
     def _load_edges(self, path):
-        edges = pd.read_csv(osp.join(path, "9606.protein.links.v11.0.txt"), sep=' ')
+        edges = pd.read_csv(os.path.join(path, "9606.protein.links.v11.0.txt"), sep=' ')
         selected_edges = edges['combined_score'] > (self.thresh * 1000)
         self.edges = edges[selected_edges][["protein1", "protein2"]].values.tolist()
         for i in range(len(self.edges)):
@@ -109,13 +152,49 @@ def sample(graph, node_id, sampler):
     # G': graph in pyg Data(x, y, edge_index)
     pass
 
-def embed(graph, model='ProNE', dim=256):
+def embed(graph, model='ProNE', filter_out={}, dim=256, save=True, save_path=''):
     ### Inputs:
     # G: object of KG
     # model: network embedding model, e.g. ProNE
     ### Outputs:
     # emb: numpy array, |G| * dim
-    pass
+    from cogdl.data import Adjacency
+    from cogdl.models.emb.prone import ProNE
+    name2id = {}
+    cnt = 0
+    filtered = 0
+    row = []
+    col = []
+    for h, t, r in kg:
+        ndrug = 0
+        if (h, t) in filter_out:
+            filtered += 1
+            continue
+        if h not in name2id:
+            cnt += 1
+            name2id[h] = cnt
+        if t not in name2id:
+            cnt += 1
+            name2id[t] = cnt
+        row.append(name2id[h])
+        col.append(name2id[t])
+    logger.info("Filtered out %d edges in val/test set" % (filtered))
+        
+    row = torch.tensor(row)
+    col = torch.tensor(col)
+    graph = Adjacency(row, col)
+    emb_model = ProNE(dim, 5, 0.2, 0.5)
+    logger.info("Generating Knowledge Graph Embeddings...")
+    emb = emb_model(graph)
+    
+    kg_emb = {}
+    for key in name2id:
+        kg_emb[key] = emb[name2id[key]]
+
+    if save:
+        pickle.dump(kg_emb, open(save_path, "wb"))
+
+    return kg_emb
 
 def bfs(graph, node_id, max_depth):
     ### Inputs:

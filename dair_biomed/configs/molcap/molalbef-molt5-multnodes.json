@@ -33,7 +33,7 @@
             "gin_num_layers": 5,
             "drop_ratio": 0.0,
             "bert_config_path": "./configs/mtr/kvplm_bert_config.json",
-            "max_n_nodes": -1,
+            "max_n_nodes": 128,
             "projection_dim": 256,
             "kge": {
                 "n_ents": 49111,
@@ -48,7 +48,7 @@
             "stop_grad": false
         },
         "text": {
-            "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-small-smiles2caption",
+            "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-small",
             "stop_grad": false
         }
     }

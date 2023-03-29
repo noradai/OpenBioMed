@@ -29,10 +29,12 @@ class PromptGenDataset(Text2MolGenDataset):
     def _load_data(self):
         self.texts = [
             'The molecule is soluable in water.',
-            'The molecule is insoluable in water.'
+            'The molecule is not soluable in water.',
+            'The molecule has high permeability.',
+            'The molecule has low permeability.',
         ]
         """
-            'The molecule is a sulfonated xanthene dye of absorption wavelength 573nm and emission wavelength 591 nm. It has a role of fluorochrome.'
+        self.texts = [
             'The molecule is beautiful.', 
             'The molecule is versatile.', 
             'The molecule is strange.',
@@ -43,6 +45,7 @@ class PromptGenDataset(Text2MolGenDataset):
             'molecules containing electrophilic groups',
             'molecules containing hydrophilic groups', 
             'molecules containing lipophilic groups'
+        ]
         """
         self.smiles = None
 

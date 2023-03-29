@@ -2,14 +2,14 @@
 MODE="traintest"
 MODEL="molalbef"
 DEVICE="cuda:0"
-EPOCHS=300
+EPOCHS=200
 
 python tasks/multi_modal_task/molcap.py \
 --device ${DEVICE} \
---config_path ./configs/molcap/${MODEL}-molt5.json \
+--config_path ./configs/molcap/${MODEL}-molt5-multnodes.json \
 --dataset chebi-20 \
 --dataset_path ../datasets/molcap/chebi-20 \
---output_path ../ckpts/finetune_ckpts/molcap/ \
+--output_path ../ckpts/finetune_ckpts/molcap-multnodes/ \
 --caption_save_path ../assets/molcap/${MODEL}-captions.txt \
 --mode ${MODE} \
 --epochs ${EPOCHS} \

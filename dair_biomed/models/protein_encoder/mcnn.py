@@ -1,3 +1,5 @@
+from typing import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -44,16 +46,17 @@ class StackCNN(nn.Module):
         return self.inc(x).squeeze(-1)
 
 class MCNN(nn.Module):
-    def __init__(self, block_num, vocab_size, embedding_num):
+    def __init__(self, config):
         super().__init__()
-        self.embed = nn.Embedding(vocab_size, embedding_num, padding_idx=0)
+        self.output_dim = config["hidden_size"]
+        self.embed = nn.Embedding(config["vocab_size"], config["embedding_num"], padding_idx=0)
         self.block_list = nn.ModuleList()
-        for block_idx in range(block_num):
+        for block_idx in range(config["block_num"]):
             self.block_list.append(
-                StackCNN(block_idx+1, embedding_num, 96, 3)
+                StackCNN(block_idx + 1, config["embedding_num"], config["hidden_size"], config["kernel_size"])
             )
 
-        self.linear = nn.Linear(block_num * 96, 96)
+        self.linear = nn.Linear(config["block_num"] * config["hidden_size"], config["hidden_size"])
         
     def forward(self, x):
         x = self.embed(x).permute(0, 2, 1)

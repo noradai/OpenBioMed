@@ -12,6 +12,10 @@ def random_split(n, r_val, r_test):
     val_cutoff = (r_train + r_val) * n
     return perm[:train_cutoff], perm[train_cutoff : val_cutoff], perm[val_cutoff:]
 
+def kfold_split(n, k):
+    perm = np.random.permutation(n)
+    return [perm[i * n // k: (i + 1) * n // k] for i in range(k)]
+
 def _generate_scaffold(smiles, include_chirality=False):
     mol = Chem.MolFromSmiles(smiles)
     scaffold = MurckoScaffoldSmiles(mol=mol, includeChirality=include_chirality)
