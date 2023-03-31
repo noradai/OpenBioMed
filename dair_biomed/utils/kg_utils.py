@@ -7,6 +7,7 @@ import json
 import pandas as pd
 import numpy as np
 import pickle
+from tqdm import tqdm
 import torch
 
 from rdkit import Chem
@@ -31,37 +32,41 @@ class BMKG(KG):
         self.drugs = json.load(open(os.path.join(path, "drug.json"), "r"))
         self.smi2drugid = {}
         for key in self.drugs:
-            smi = Chem.MolToSmiles(Chem.MolFromSmiles(self.drugs[key]["SMILES"]), isomericSmiles=True)
-            self.smi2drugid[smi] = key
+            mol = Chem.MolFromSmiles(self.drugs[key]["SMILES"])
+            if mol is not None:
+                smi = Chem.MolToSmiles(mol, isomericSmiles=True)
+                self.smi2drugid[smi] = key
 
         self.proteins = json.load(open(os.path.join(path, "protein.json"), "r"))
         self.seq2proteinid = {}
         for key in self.proteins:
             self.seq2proteinid[self.proteins[key]["sequence"]] = key
 
-        df = pd.read_csv(os.path.join(path, "edge.csv"))
-        self.edges = []
-        for row in df.iterrows():
-            self.edges.append((row["x_id"], row["end_id"], row["relation"]))
+        self.edges = pd.read_csv(os.path.join(path, "links.csv"), dtype=str).values.tolist()
 
     def link(self, dataset):
+        link_drug, link_protein = 0, 0
         drug2kg, drug2text = {}, {}
         for smi in dataset.smiles:
             iso_smi = Chem.MolToSmiles(Chem.MolFromSmiles(smi), isomericSmiles=True)
             if iso_smi in self.smi2drugid:
-                drug2kg[smi] = self.smi2drugid[smi]
-                drug2text[smi] = self.drugs[self.smi2drugid[smi]]["text"]
+                link_drug += 1
+                drug2kg[smi] = self.smi2drugid[iso_smi]
+                drug2text[smi] = self.drugs[self.smi2drugid[iso_smi]]["text"]
             else:
-                drug2kg[smi] = -1
-                drug2text[smi] = "No descriptions available."
+                drug2kg[smi] = None
+                drug2text[smi] = "No description for the drug is available."
         protein2kg, protein2text = {}, {}
         for seq in dataset.proteins:
             if seq in self.seq2proteinid:
+                link_protein += 1
                 protein2kg[seq] = self.seq2proteinid[seq]
                 protein2text[seq] = self.proteins[self.seq2proteinid[seq]]["text"]
             else:
-                protein2kg[seq] = -1
-                protein2text[seq] = "No descriptions available."
+                protein2kg[seq] = None
+                protein2text[seq] = "No description for the protein is available."
+        logger.info("Linked drug %d/%d" % (link_drug, len(dataset.smiles)))
+        logger.info("Linked proteien %d/%d" % (link_protein, len(dataset.proteins)))
         return drug2kg, drug2text, protein2kg, protein2text
  
 class BMKGv2(KG):
@@ -158,6 +163,10 @@ def embed(graph, model='ProNE', filter_out={}, dim=256, save=True, save_path='')
     # model: network embedding model, e.g. ProNE
     ### Outputs:
     # emb: numpy array, |G| * dim
+    if save and os.path.exists(save_path):
+        logger.info("Load KGE from saved file.")
+        return pickle.load(open(save_path, "rb"))
+
     from cogdl.data import Adjacency
     from cogdl.models.emb.prone import ProNE
     name2id = {}
@@ -165,8 +174,7 @@ def embed(graph, model='ProNE', filter_out={}, dim=256, save=True, save_path='')
     filtered = 0
     row = []
     col = []
-    for h, t, r in kg:
-        ndrug = 0
+    for h, t, r in graph.edges:
         if (h, t) in filter_out:
             filtered += 1
             continue
@@ -184,7 +192,7 @@ def embed(graph, model='ProNE', filter_out={}, dim=256, save=True, save_path='')
     col = torch.tensor(col)
     graph = Adjacency(row, col)
     emb_model = ProNE(dim, 5, 0.2, 0.5)
-    logger.info("Generating Knowledge Graph Embeddings...")
+    logger.info("Generating KGE...")
     emb = emb_model(graph)
     
     kg_emb = {}

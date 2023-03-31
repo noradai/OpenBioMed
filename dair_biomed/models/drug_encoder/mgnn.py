@@ -5,7 +5,6 @@ Implementation of MGNN in MGraphDTA: Deep Multiscale Graph Neural Network for Ex
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import global_mean_pool
 from torch.nn.modules.batchnorm import _BatchNorm
 import torch_geometric.nn as gnn
 from torch import Tensor
@@ -109,24 +108,24 @@ class DenseBlock(nn.ModuleDict):
 
 
 class MGNN(nn.Module):
-    def __init__(self, num_input_features, out_dim, growth_rate=32, block_config = (3, 3, 3, 3), bn_sizes=[2, 3, 4, 4]):
+    def __init__(self, config):
         super().__init__()
-        self.output_dim = out_dim
-        self.features = nn.Sequential(OrderedDict([('conv0', GraphConvBn(num_input_features, 32))]))
+        self.output_dim = config["out_dim"]
+        self.features = nn.Sequential(OrderedDict([('conv0', GraphConvBn(config["num_input_features"], 32))]))
         num_input_features = 32
 
-        for i, num_layers in enumerate(block_config):
+        for i, num_layers in enumerate(config["block_config"]):
             block = DenseBlock(
-                num_layers, num_input_features, growth_rate=growth_rate, bn_size=bn_sizes[i]
+                num_layers, num_input_features, growth_rate=config["growth_rate"], bn_size=config["bn_sizes"][i]
             )
             self.features.add_module('block%d' % (i+1), block)
-            num_input_features += int(num_layers * growth_rate)
+            num_input_features += int(num_layers * config["growth_rate"])
 
             trans = GraphConvBn(num_input_features, num_input_features // 2)
             self.features.add_module("transition%d" % (i+1), trans)
             num_input_features = num_input_features // 2
 
-        self.classifer = nn.Linear(num_input_features, out_dim)
+        self.classifer = nn.Linear(num_input_features, config["out_dim"])
 
     def forward(self, data):
         data = self.features(data)

@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from transformers import BertModel, BertTokenizer, T5Model, T5Tokenizer
 
 from feat.base_featurizer import BaseFeaturizer
+from utils import ToDevice
 
 name2tokenizer = {
     "bert": BertTokenizer,
@@ -55,15 +56,19 @@ class TextTransformerSentFeaturizer(TextFeaturizer):
 class TextTransformerEncFeaturizer(TextFeaturizer):
     def __init__(self, config):
         super(TextTransformerEncFeaturizer, self).__init__()
+        self.device = config["device"]
+
+        self.max_length = config["max_length"]
         self.tokenizer = name2tokenizer[config["transformer_type"]].from_pretrained(config["model_name_or_path"], model_max_length=self.max_length)
         self.encoder = name2model[config["transformer_type"]].from_pretrained(config["model_name_or_path"])
-        self.max_length = config["max_length"]
-
+        self.encoder = self.encoder.to(self.device)
+        
     def __call__(self, data):
         if self.transform is not None:
             data = self.transform[data]
         data = self.tokenizer(data, truncation=True, padding=True, return_tensors='pt')
-        return self.encoder(**data)[1]
+        data = ToDevice(data, self.device)
+        return self.encoder(**data)["pooler_output"].detach().cpu()
 
 SUPPORTED_TEXT_FEATURIZER = {
     "TransformerTokenizer": TextTransformerTokFeaturizer,

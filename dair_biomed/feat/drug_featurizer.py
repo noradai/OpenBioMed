@@ -1,3 +1,6 @@
+import logging
+logger = logging.getLogger(__name__)
+
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -526,6 +529,68 @@ class DrugGGNNFeaturizer(BaseFeaturizer):
         adj_prime = num_neighbors_inv[None, None, :] * adj
         return adj_prime
 
+class DrugMGNNFeaturizer(BaseFeaturizer):
+    allowable_atom_list = ['C', 'N', 'O', 'S', 'F', 'Si', 'P', 'Cl', 'Br', 'Mg', 'Na','Ca', 'Fe', 'As', 'Al', 'I', 'B', 'V', 'K', 'Tl', 'Yb','Sb', 'Sn', 'Ag', 'Pd', 'Co', 'Se', 'Ti', 'Zn', 'H','Li', 'Ge', 'Cu', 'Au', 'Ni', 'Cd', 'In', 'Mn', 'Zr','Cr', 'Pt', 'Hg', 'Pb', 'Unknown']
+    allowable_degree_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    allowable_num_hs_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    allowable_implicit_valence_list = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    allowable_hybridization_list = [
+        Chem.rdchem.HybridizationType.SP, 
+        Chem.rdchem.HybridizationType.SP2,
+        Chem.rdchem.HybridizationType.SP3, 
+        Chem.rdchem.HybridizationType.SP3D,
+        Chem.rdchem.HybridizationType.SP3D2, 
+        'other'
+    ]
+    allowable_cip_code_list = ['R', 'S']
+
+    def __init__(self, config):
+        super(DrugMGNNFeaturizer, self).__init__()
+        self.config = config
+
+    def __call__(self, data):
+        if isinstance(data, str):
+            mol = Chem.MolFromSmiles(data)
+        else:
+            mol = data
+        
+        atom_features_list = []
+        for atom in mol.GetAtoms():
+            encoding = self.one_of_k_encoding(atom.GetSymbol(), self.allowable_atom_list)
+            encoding += self.one_of_k_encoding(atom.GetDegree(), self.allowable_degree_list)
+            encoding += self.one_of_k_encoding_unk(atom.GetTotalNumHs(), self.allowable_num_hs_list)
+            encoding += self.one_of_k_encoding_unk(atom.GetImplicitValence(), self.allowable_implicit_valence_list)
+            encoding += self.one_of_k_encoding_unk(atom.GetHybridization(), self.allowable_hybridization_list)
+            encoding += [atom.GetIsAromatic()]
+            try:
+                encoding += self.one_of_k_encoding_unk(atom.GetProp("_CIPNode"), self.allowable_cip_code_list)
+            except:
+                encoding += [0, 0]
+            encoding += [atom.HasProp("_ChiralityPossible")]
+            atom_features_list.append(encoding)
+        x = torch.tensor(np.array(atom_features_list), dtype=torch.float)
+
+        edges_list = []
+        for bond in mol.GetBonds():
+            i = bond.GetBeginAtomIdx()
+            j = bond.GetEndAtomIdx()
+            edges_list.append((i, j))
+            edges_list.append((j, i))
+        edge_index = torch.tensor(np.array(edges_list).T, dtype=torch.long)
+        
+        return Data(x=x, edge_index=edge_index)
+
+    def one_of_k_encoding(self, x, allowable_set):
+        if x not in allowable_set:
+            raise Exception("input {0} not in allowable set{1}:".format(x, allowable_set))
+        return list(map(lambda s: x == s, allowable_set))
+
+    def one_of_k_encoding_unk(self, x, allowable_set):
+        """Maps inputs not in the allowable set to the last element."""
+        if x not in allowable_set:
+            x = allowable_set[-1]
+        return list(map(lambda s: x == s, allowable_set))
+
 class DrugMultiScaleFeaturizer(BaseFeaturizer):
     def __init__(self, config):
         super(DrugMultiScaleFeaturizer, self).__init__()
@@ -540,6 +605,7 @@ class DrugMultiScaleFeaturizer(BaseFeaturizer):
         for scale in self.scales:
             feat[scale] = self.featurizers[scale](data)
         return feat
+
     
 class DrugMultiModalFeaturizer(BaseFeaturizer):
     def __init__(self, config):
@@ -549,24 +615,31 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
         if "structure" in config["modality"]:
             conf = config["featurizer"]["structure"]
             self.featurizers["structure"] = SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER[conf["name"]](conf)
-        if "KG" in config["modality"]:
-            conf = config["featurizer"]["KG"]
-            self.featurizers["KG"] = SUPPORTED_KG_FEATURIZER[conf["name"]](conf)
+        if "kg" in config["modality"]:
+            conf = config["featurizer"]["kg"]
+            self.featurizers["kg"] = SUPPORTED_KG_FEATURIZER[conf["name"]](conf)
         if "text" in config["modality"]:
             conf = config["featurizer"]["text"]
             self.featurizers["text"] = SUPPORTED_TEXT_FEATURIZER[conf["name"]](conf)
 
     def set_drug2kgid_dict(self, drug2kgid):
-        self.featurizers["KG"].set_transform(drug2kgid)
+        self.featurizers["kg"].set_transform(drug2kgid)
 
     def set_drug2text_dict(self, drug2text):
         self.featurizers["text"].set_transform(drug2text)
 
-    def __call__(self, data):
+    def __call__(self, data, skip=[]):
         feat = {}
         for modality in self.featurizers.keys():
-            feat[modality] = self.featurizers[modality](data)
+            if modality not in skip:
+                feat[modality] = self.featurizers[modality](data)
         return feat
+
+    def __getitem__(self, index):
+        if index not in self.modality:
+            logger.error("%s is not a valid modality!" % (index))
+            return None
+        return self.featurizers[index]
 
 SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "OneHot": DrugOneHotFeaturizer,
@@ -575,6 +648,7 @@ SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "fp": DrugFPFeaturizer,
     "TGSA": DrugTGSAFeaturizer,
     "ogb": DrugGraphFeaturizer,
+    "MGNN": DrugMGNNFeaturizer,
     "BaseGNN": DrugGraphFeaturizer,
 }
 

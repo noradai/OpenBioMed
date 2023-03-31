@@ -33,7 +33,7 @@
             "gin_num_layers": 5,
             "drop_ratio": 0.0,
             "bert_config_path": "./configs/mtr/kvplm_bert_config.json",
-            "max_n_nodes": 128,
+            "max_n_nodes": 256,
             "projection_dim": 256,
             "kge": {
                 "n_ents": 49111,

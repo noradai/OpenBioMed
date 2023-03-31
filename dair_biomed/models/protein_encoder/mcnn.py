@@ -42,13 +42,12 @@ class StackCNN(nn.Module):
         self.inc.add_module('pool_layer', nn.AdaptiveMaxPool1d(1))
 
     def forward(self, x):
-
         return self.inc(x).squeeze(-1)
 
 class MCNN(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.output_dim = config["hidden_size"]
+        self.output_dim = config["output_size"]
         self.embed = nn.Embedding(config["vocab_size"], config["embedding_num"], padding_idx=0)
         self.block_list = nn.ModuleList()
         for block_idx in range(config["block_num"]):
@@ -56,7 +55,7 @@ class MCNN(nn.Module):
                 StackCNN(block_idx + 1, config["embedding_num"], config["hidden_size"], config["kernel_size"])
             )
 
-        self.linear = nn.Linear(config["block_num"] * config["hidden_size"], config["hidden_size"])
+        self.linear = nn.Linear(config["block_num"] * config["hidden_size"], config["output_size"])
         
     def forward(self, x):
         x = self.embed(x).permute(0, 2, 1)

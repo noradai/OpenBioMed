@@ -48,11 +48,16 @@ class GraphEnhancedMolCapModel(nn.Module):
             if config["graph"]["stop_grad"]:
                 for k, v in self.graph_encoder.named_parameters():
                     v.requires_grad = False
-            self.graph_projector = nn.Sequential(
-                nn.Linear(config["graph"]["output_dim"], self.generate_model.hidden_size),
-                nn.ReLU(inplace=True),
-                nn.Linear(self.generate_model.hidden_size, self.generate_model.hidden_size)
-            )
+            if not self.use_node_embeds:
+                self.graph_projector = nn.Sequential(
+                    nn.Linear(config["graph"]["output_dim"], self.generate_model.hidden_size),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(self.generate_model.hidden_size, self.generate_model.hidden_size)
+                )
+            else:
+                self.proj1 = nn.Linear(self.generate_model.hidden_size, config["graph"]["output_dim"])
+                self.cross_attn = nn.MultiheadAttention(config["graph"]["output_dim"], 4, batch_first=True)
+                self.proj2 = nn.Linear(config["graph"]["output_dim"], self.generate_model.hidden_size)
 
     def forward(self, mol):
         h, encoder_attention_mask = self._combined_encodings(mol)
@@ -80,6 +85,7 @@ class GraphEnhancedMolCapModel(nn.Module):
         if self.use_graph:
             if self.use_node_embeds:
                 graph_feats, node_feats, node_attention_mask = self.graph_encoder.encode_structure(mol["structure"]["graph"], proj=False, return_node_feats=True)
+                """
                 graph_feats = self.graph_projector(graph_feats)
                 node_feats = self.graph_projector(node_feats)
                 h = BaseModelOutput(
@@ -88,6 +94,17 @@ class GraphEnhancedMolCapModel(nn.Module):
                     attentions=None
                 )
                 encoder_attention_mask = torch.cat([torch.ones(B, 1).to(device), node_attention_mask, mol["structure"]["SMILES"]["attention_mask"]], dim=1)
+                """
+                smi_proj_feats = self.proj1(smi_feats)
+                graph_feats = torch.cat((graph_feats.unsqueeze(1), node_feats), dim=1)
+                graph_attn_mask = torch.cat((torch.ones(B, 1).to(device), node_attention_mask), dim=1)
+                attn_output = self.cross_attn(smi_proj_feats, graph_feats, graph_feats, key_padding_mask=graph_attn_mask)[0]
+                h = BaseModelOutput(
+                    last_hidden_state=smi_feats + self.proj2(attn_output),
+                    hidden_states=None,
+                    attentions=None
+                )
+                encoder_attention_mask = mol["structure"]["SMILES"]["attention_mask"]
             else:
                 if "additional_text" in mol:
                     graph_feats = self.graph_encoder(mol["structure"]["graph"], mol["additional_text"])["last_hidden_state"][:, 0, :]

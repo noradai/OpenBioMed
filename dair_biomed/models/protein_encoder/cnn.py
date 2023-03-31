@@ -7,6 +7,8 @@ from collections import OrderedDict
 class CNN(nn.Module):
     def __init__(self, config):
         super(CNN, self).__init__()
+        self.output_dim = config["output_dim"]
+        
         layer_size = len(config["in_ch"]) - 1
         self.conv = nn.ModuleList(
             [nn.Conv1d(

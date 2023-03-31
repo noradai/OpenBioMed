@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 
+import torch
+
 from feat.base_featurizer import BaseFeaturizer
-from utils.kg_utils import SUPPORTED_KG
+from utils.kg_utils import SUPPORTED_KG, embed
 
 class KGFeaturizer(BaseFeaturizer, ABC):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.kg = SUPPORTED_KG[config["kg_name"]](config["kg_path"])
+        self.kg = SUPPORTED_KG[self.config["kg_name"]](self.config["kg_path"])
         self.transform = None
 
     def set_transform(self, transform):
@@ -20,21 +22,26 @@ class KGFeaturizer(BaseFeaturizer, ABC):
 class KGIDFeaturizer(KGFeaturizer):
     def __init__(self, config):
         super().__init__(config)
-        if not hasattr(self.kg, "ent_dict") or not hasattr(self.kg, "rel_dict"):
-            raise AttributeError
-        else:
-            self.set_transform(self.kg["ent_dict"])
+
+    def __call__(self, data):
+        return self.transform(data)
+
+# ugly, redesign later
+class KGEFeaturizer(KGFeaturizer):
+    def __init__(self, config):
+        super().__init__(config)
+        self.kge = config["kge"]
+        self.embed_dim = config["embed_dim"]
 
     def __call__(self, data):
         if self.transform is not None:
             data = self.transform[data]
-        return self.kg[data]
+        if data is None or data not in self.kge:
+            return torch.zeros(self.embed_dim)
+        else:
+            return torch.FloatTensor(self.kge[data])
 
-class KGEFeaturizer(KGFeaturizer):
-    def __init__(self, config):
-        super().__init__(config)
-
-    def __call__(self, data):
-        pass
-
-SUPPORTED_KG_FEATURIZER = {KGIDFeaturizer, KGEFeaturizer}
+SUPPORTED_KG_FEATURIZER = {
+    "id": KGIDFeaturizer, 
+    "KGE": KGEFeaturizer
+}

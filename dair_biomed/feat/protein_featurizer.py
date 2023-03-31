@@ -10,6 +10,27 @@ from feat.text_featurizer import SUPPORTED_TEXT_FEATURIZER
 
 from transformers import AutoTokenizer
 
+class ProteinIndexFeaturizer(BaseFeaturizer):
+    VOCAB_PROTEIN = { 
+        "A": 1, "C": 2, "B": 3, "E": 4, "D": 5, "G": 6, 
+		"F": 7, "I": 8, "H": 9, "K": 10, "M": 11, "L": 12, 
+		"O": 13, "N": 14, "Q": 15, "P": 16, "S": 17, "R": 18, 
+		"U": 19, "T": 20, "W": 21, "V": 22, "Y": 23, "X": 24, 
+	    "Z": 25
+    }
+
+    def __init__(self, config):
+        super(ProteinIndexFeaturizer, self).__init__()
+        self.max_length = config["max_len"]
+
+    def __call__(self, data):
+        temp = [self.VOCAB_PROTEIN[s] for s in data]
+        if len(temp) < self.max_length:
+            temp = np.pad(temp, (0, self.max_length - len(temp)))
+        else:
+            temp = temp[:self.max_length]
+        return torch.LongTensor(temp)
+
 class ProteinOneHotFeaturizer(BaseFeaturizer):
     amino_char = [
         '?', 'A', 'C', 'B', 'E', 'D', 'G', 'F', 'I', 'H', 'K', 'M', 'L',
@@ -40,7 +61,8 @@ class ProteinTransformerTokFeaturizer(BaseFeaturizer):
         return result
 
 SUPPORTED_SINGLE_MODAL_PROTEIN_FEATURIZER = {
-    "onehot": ProteinOneHotFeaturizer,
+    "index": ProteinIndexFeaturizer,
+    "OneHot": ProteinOneHotFeaturizer,
     "transformer": ProteinTransformerTokFeaturizer
 }
 
@@ -52,15 +74,15 @@ class ProteinMultiModalFeaturizer(BaseFeaturizer):
         if "structure" in config["modality"]:
             conf = config["featurizer"]["structure"]
             self.featurizers["structure"] = SUPPORTED_SINGLE_MODAL_PROTEIN_FEATURIZER[conf["name"]](conf)
-        if "KG" in config["modality"]:
-            conf = config["featurizer"]["KG"]
-            self.featurizers["KG"] = SUPPORTED_KG_FEATURIZER[conf["name"]](conf)
+        if "kg" in config["modality"]:
+            conf = config["featurizer"]["kg"]
+            self.featurizers["kg"] = SUPPORTED_KG_FEATURIZER[conf["name"]](conf)
         if "text" in config["modality"]:
             conf = config["featurizer"]["text"]
             self.featurizers["text"] = SUPPORTED_TEXT_FEATURIZER[conf["name"]](conf)
 
     def set_protein2kgid_dict(self, protein2kgid):
-        self.featurizers["KG"].set_transform(protein2kgid)
+        self.featurizers["kg"].set_transform(protein2kgid)
 
     def set_protein2text_dict(self, protein2text):
         self.featurizers["text"].set_transform(protein2text)

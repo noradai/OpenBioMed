@@ -5,5 +5,14 @@ from models.drug_encoder.momu import *
 from models.drug_encoder.molalbef import *
 from models.drug_encoder.kv_plm import *
 from models.drug_encoder.bert import *
-from models.drug_encoder.deepeik import *
+from models.drug_encoder.molclr_gnn import *
 from models.drug_encoder.text2mol import *
+
+SUPPORTED_DRUG_ENCODER = {
+    "cnn": CNN,
+    "mgnn": MGNN,
+    "kvplm": KVPLM,
+    "graphcl": MoMuGNN,
+    "molclr": GINet,
+    "graphmvp": PygGNN,
+}

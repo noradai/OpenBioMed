@@ -69,7 +69,7 @@ class DrugCollator(BaseCollator):
             for modality in self.config["modality"]:
                 batch[modality] = self._collate_single([drug[modality] for drug in drugs], self.config["featurizer"][modality])
         else:
-            batch = self._collate_single(drugs)
+            batch = self._collate_single(drugs, self.config["featurizer"]["structure"])
         return batch
 
 class ProteinCollator(BaseCollator):
@@ -86,7 +86,7 @@ class ProteinCollator(BaseCollator):
                 else:
                     batch[modality] = self._collate_single([drug[modality] for drug in proteins], self.config["featurizer"][modality])
         else:
-            batch = self._collate_single(proteins)
+            batch = self._collate_single(proteins, self.config["featurizer"]["structure"])
         return batch
 
 class DPCollator(object):
@@ -106,4 +106,4 @@ class DTICollator(object):
 
     def __call__(self, data):
         drugs, prots, labels = map(list, zip(*data))
-        return self.drug_collator(drugs), self.protein_collator(prots), torch.stack(labels)
+        return self.drug_collator(drugs), self.protein_collator(prots), torch.tensor(labels)
