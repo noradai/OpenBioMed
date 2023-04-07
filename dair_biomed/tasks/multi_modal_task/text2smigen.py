@@ -12,21 +12,21 @@ from tqdm import tqdm
 import numpy as np
 
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader
-from transformers import BertTokenizerFast
 
+from rdkit import Chem, RDLogger, DataStructs
+from rdkit.Chem import AllChem, MACCSkeys
+RDLogger.DisableLog('rdApp.*')
 from nltk.translate.bleu_score import corpus_bleu
-from nltk.translate.meteor_score import meteor_score
-from rouge_score import rouge_scorer
+from Levenshtein import distance as lev
 
 from datasets.molcap_dataset import SUPPORTED_MOLCAP_DATASET
 from models.drug_encoder import Text2MolMLP
-from models.molcap_model import GraphEnhancedMolCapModel
+from models.text2smi_model import Text2SMILESModel
 
-from utils import AverageMeter, EarlyStopping, ToDevice, DrugCollator
+from utils import AverageMeter, ToDevice, DrugCollator
 
-def train_molcap(train_loader, val_loader, test_loader, test_dataset, model, args, device):
+def train_text2smi(train_loader, val_loader, test_loader, test_dataset, model, args, device):
     requires_grad = []
     for k, v in model.named_parameters():
         if v.requires_grad:
@@ -54,13 +54,13 @@ def train_molcap(train_loader, val_loader, test_loader, test_dataset, model, arg
             if step % args.logging_steps == 0:
                 logger.info("Steps=%d Training Loss=%.4lf" % (step, running_loss.get_average()))
                 running_loss.reset()
-        val_molcap(val_loader, model, device)
+        val_text2smi(val_loader, model, device)
         if (epoch + 1) % 10 == 0:
             torch.save({'model_state_dict': model.state_dict()}, os.path.join(args.output_path, "checkpoint_" + str(epoch) + ".pth"))
-            print(test_molcap(test_dataset, test_loader, model, args, device))
+            print(test_text2smi(test_dataset, test_loader, model, args, device))
     return model
 
-def val_molcap(val_loader, model, device):
+def val_text2smi(val_loader, model, device):
     model.eval()
     val_loss = 0
 
@@ -72,10 +72,10 @@ def val_molcap(val_loader, model, device):
     logger.info("validation loss %.4lf" % (val_loss / len(val_loader)))
     return val_loss / len(val_loader)
 
-def test_molcap(test_dataset, test_loader, model, args, device):
+def test_text2smi(test_dataset, test_loader, model, args, device):
     model.eval()
     outputs = []
-    gts = test_dataset.texts
+    gts = test_dataset.smiles
 
     logger.info("Testing...")
     for i, mol in enumerate(tqdm(test_loader)):
@@ -84,65 +84,84 @@ def test_molcap(test_dataset, test_loader, model, args, device):
         outputs += output
         if i <= 3:
             for j in range(5):
-                logger.info("Generated: %s" % outputs[-j])
+                logger.info("Generated:    %s" % outputs[-j])
                 logger.info("Ground truth: %s" % gts[len(outputs) - j])
                 logger.info("------------------------------------------------------")
 
-    tokenizer = BertTokenizerFast.from_pretrained(args.text2mol_bert_path)
+    N = len(outputs)
     output_tokens = []
     gt_tokens = []
-    meteor_scores = []
-    rouge_scores = []
-    text2mol_scores = []
-    scorer = rouge_scorer.RougeScorer(['rouge1', 'rouge2', 'rougeL'])
+    levs = []
+    maccs_sim, rdk_sim, morgan_sim = [], [], []
+    n_bad_mols = 0
+    n_exact = 0
+    with open(args.smi_save_path, "w") as f:
+        f.write("text\tground truth\toutput\n")
+        for i in range(N):
+            output_tokens.append([c for c in outputs[i]])
+            gt_tokens.append([[c for c in gts[i]]])
+            try:
+                mol_output = Chem.MolFromSmiles(outputs[i])
+                mol_gt = Chem.MolFromSmiles(gts[i])
+                if Chem.MolToInchi(mol_output) == Chem.MolToInchi(mol_gt):
+                    n_exact += 1
+                maccs_sim.append(DataStructs.FingerprintSimilarity(MACCSkeys.GenMACCSKeys(mol_output), MACCSkeys.GenMACCSKeys(mol_gt), metric=DataStructs.TanimotoSimilarity))
+                rdk_sim.append(DataStructs.FingerprintSimilarity(Chem.RDKFingerprint(mol_output), Chem.RDKFingerprint(mol_gt), metric=DataStructs.TanimotoSimilarity))
+                morgan_sim.append(DataStructs.TanimotoSimilarity(AllChem.GetMorganFingerprint(mol_output, 2), AllChem.GetMorganFingerprint(mol_gt, 2)))
+            except:
+                n_bad_mols += 1
+            levs.append(lev(outputs[i], gts[i]))
+            f.write("%s\t%s\t%s\n" % (test_dataset.texts[i], gts[i], outputs[i]))
+
+    bleu = corpus_bleu(gt_tokens, output_tokens)
+    return {
+        "BLEU": bleu,
+        "Levenshtein": np.mean(levs),
+        "Valid": 1 - n_bad_mols * 1.0 / N,
+        "Exact": n_exact * 1.0 / N,
+        "MACCS FTS": np.mean(maccs_sim),
+        "RDKit FTS": np.mean(rdk_sim),
+        "Morgan FTS": np.mean(morgan_sim),
+    }
+
+def test_text2mol(args):
     text2mol = Text2MolMLP(
         ninp=768, 
         nhid=600, 
         nout=300, 
         model_name_or_path=args.text2mol_bert_path, 
-        cid2smiles_path=os.path.join(args.text2mol_data_path, "cid_to_smiles.pkl"),
-        cid2vec_path=os.path.join(args.text2mol_data_path, "test.txt")
+        cid2smiles_path=None,
+        cid2vec_path=None,
+        mol2vec_output_path=os.path.join(args.text2mol_data_path, "tmp.csv")
     )
     text2mol.load_state_dict(torch.load(args.text2mol_ckpt_path))
     device = torch.device(args.device)
     text2mol.to(device)
-    with open(args.caption_save_path, "w") as f:
-        f.write("SMILES\tground truth\toutput\n")
-        for i in range(len(outputs)):
-            output_tokens.append(tokenizer.tokenize(outputs[i], truncation=True, max_length=512, padding='max_length'))
-            output_tokens[i] = list(filter(('[PAD]').__ne__, output_tokens[i]))
-            output_tokens[i] = list(filter(('[CLS]').__ne__, output_tokens[i]))
-            output_tokens[i] = list(filter(('[SEP]').__ne__, output_tokens[i]))
 
-            gt_tokens.append(tokenizer.tokenize(gts[i], truncation=True, max_length=512, padding='max_length'))
-            gt_tokens[i] = list(filter(('[PAD]').__ne__, gt_tokens[i]))
-            gt_tokens[i] = list(filter(('[CLS]').__ne__, gt_tokens[i]))
-            gt_tokens[i] = [list(filter(('[SEP]').__ne__, gt_tokens[i]))]
-
-            meteor_scores.append(meteor_score(gt_tokens[i], output_tokens[i]))
-            rouge_scores.append(scorer.score(outputs[i], gts[i]))
-            text2mol_scores.append(text2mol(test_dataset.smiles[i], outputs[i], device).detach().cpu().item())
-            f.write(test_dataset.smiles[i] + '\t' + gts[i] + '\t' + outputs[i] + '\n')
-    bleu2 = corpus_bleu(gt_tokens, output_tokens, weights=(0.5, 0.5))
-    bleu4 = corpus_bleu(gt_tokens, output_tokens, weights=(0.25, 0.25, 0.25, 0.25))
-
-    return {
-        "BLEU-2": bleu2,
-        "BLEU-4": bleu4,
-        "Meteor": np.mean(meteor_scores),
-        "ROUGE-1": np.mean([rs['rouge1'].fmeasure for rs in rouge_scores]),
-        "ROUGE-2": np.mean([rs['rouge2'].fmeasure for rs in rouge_scores]),
-        "ROUGE-L": np.mean([rs['rougeL'].fmeasure for rs in rouge_scores]),
-        "Text2Mol": np.mean(text2mol_scores)
-    }
+    logger.info("Calculating Text2Mol Metric...")
+    text2mol_scores = []
+    bad_smiles = 0
+    with open(args.smi_save_path, "r") as f:
+        for i, line in enumerate(f.readlines()):
+            if i == 0:
+                continue
+            line = line.rstrip("\n").split("\t")
+            try:
+                smi = Chem.MolToSmiles(Chem.MolFromSmiles(line[2]))
+                if smi in text2mol.smiles2vec:
+                    text2mol_scores.append(text2mol(smi, line[0], device).detach().cpu().item())
+            except:
+                bad_smiles += 1
+    logger.info("Bad SMILES: %d" % (bad_smiles))
+    return np.mean(text2mol_scores)
 
 def add_arguments(parser):
     parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--config_path", type=str, default="")
     parser.add_argument('--dataset', type=str, default='chebi-20')
     parser.add_argument("--dataset_path", type=str, default='../datasets/molcap/chebi-20')
-    parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/caption.pth")
-    parser.add_argument("--caption_save_path", type=str, default="../assets/outputs.txt")
+    parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/text2smi.pth")
+    parser.add_argument("--smi_save_path", type=str, default="../assets/outputs.txt")
     parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--epochs", type=int, default=10)
     parser.add_argument("--num_workers", type=int, default=1)
@@ -169,6 +188,10 @@ if __name__ == "__main__":
 
     device = torch.device(args.device)
 
+    if args.mode == "test_text2mol":
+        print("Text2Mol:", test_text2mol(args))
+        exit(0)
+
     # load dataset
     train_dataset = SUPPORTED_MOLCAP_DATASET[args.dataset](args.dataset_path, config["data"]["drug"], split="train")
     val_dataset = SUPPORTED_MOLCAP_DATASET[args.dataset](args.dataset_path, config["data"]["drug"], split="validation")
@@ -179,18 +202,18 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, args.batch_size, shuffle=False, collate_fn=collator, num_workers=args.num_workers)
 
     # load model
-    model = GraphEnhancedMolCapModel(config["network"])
+    model = Text2SMILESModel(config["network"])
     model = model.to(device)
 
     if args.mode == "train":
-        train_molcap(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
+        train_text2smi(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
     elif args.mode == "test":
         if os.path.exists(args.output_path):
             state_dict = torch.load(args.output_path, map_location=device)["model_state_dict"]
             model.load_state_dict(state_dict)
-        results = test_molcap(test_dataset, test_dataloader, model, args, device)
+        results = test_text2smi(test_dataset, test_dataloader, model, args, device)
         print(results)
     elif args.mode == "traintest":
-        train_molcap(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
-        results = test_molcap(test_dataset, test_dataloader, model, args, device)
+        train_text2smi(train_dataloader, val_dataloader, test_dataloader, test_dataset, model, args, device)
+        results = test_text2smi(test_dataset, test_dataloader, model, args, device)
         print(results)

@@ -41,7 +41,7 @@ def train_dti(train_loader, val_loader, model, args, device):
         logger.info("Training...")
         model.train()
         step = 0
-        for mol, prot, label in tqdm(train_loader):
+        for mol, prot, label in train_loader:
             mol = ToDevice(mol, device)
             prot = ToDevice(prot, device)
             label = label.to(device)
@@ -66,7 +66,7 @@ def train_dti(train_loader, val_loader, model, args, device):
             if stopper.step(results[key], model):
                 break
     if val_loader is not None:
-        model = model.load_state_dict(torch.load(args.output_path)["model_state_dict"])
+        model.load_state_dict(torch.load(args.output_path)["model_state_dict"])
     return model
 
 def eval_dti(split, val_loader, model, args, device):
@@ -80,11 +80,13 @@ def eval_dti(split, val_loader, model, args, device):
     all_loss = 0
     all_preds = []
     all_labels = []
-    for mol, prot, label in tqdm(val_loader):
+    for mol, prot, label in val_loader:
         mol = ToDevice(mol, device)
         prot = ToDevice(prot, device)
         label = label.to(device)
         pred = model(mol, prot)
+        if len(pred.shape) < 2:
+            pred = pred.unsqueeze(0)
         all_loss += loss_fn(pred, label).item()
         if args.task == "classification":
             pred = F.softmax(pred, dim=-1)[:, 1]
@@ -129,31 +131,26 @@ def main(args, config):
         pred_dim = 1
     dataset = SUPPORTED_DTI_DATASETS[args.dataset](args.dataset_path, config["data"], args.split_strategy)
 
-    # prepare model
-    if len(config["data"]["drug"]["modality"]) > 1:
-        model = DeepEIK4DTI(config["network"], pred_dim)
-    else:
-        model = DTIModel(config["network"], pred_dim)
-    if args.init_checkpoint != "None":
-        ckpt = torch.load(args.init_checkpoint)
-        if args.param_key != "None":
-            ckpt = ckpt[args.param_key]
-        model.load_state_dict(ckpt)
-    device = torch.device(args.device)
-    model = model.to(device)
-
     if args.mode == "train":
         train_dataset = dataset.index_select(dataset.train_index)
-        if len(args.val_index) > 0:
+        if len(dataset.val_index) > 0:
             val_dataset = dataset.index_select(dataset.val_index)
         else:
             val_dataset = None
         test_dataset = dataset.index_select(dataset.test_index)
-        filter_index = dataset.val_index + dataset.test_index
-        train_dataset._build(filter_index)
+        train_dataset._build(
+            test_dataset.pair_index, 
+            None if "kg" not in config["data"]["drug"]["modality"] else os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + ".pkl")
+        )
         if val_dataset is not None:
-            val_dataset._build(filter_index)
-        test_dataset._build(filter_index)
+            val_dataset._build(
+                test_dataset.pair_index, 
+                None if "kg" not in config["data"]["drug"]["modality"] else os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + ".pkl")
+            )
+        test_dataset._build(
+            test_dataset.pair_index, 
+            None if "kg" not in config["data"]["drug"]["modality"] else os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + ".pkl")
+        )
         collator = DTICollator(config["data"])
         train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collator)
         if val_dataset is not None:
@@ -161,19 +158,54 @@ def main(args, config):
         else:
             val_loader = None
         test_loader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
-        model = train_dti(train_loader, val_loader, model, args, device)
-        eval_dti("test", test_loader, model, args, device)
+        
+        if len(config["data"]["drug"]["modality"]) > 1:
+            model = DeepEIK4DTI(config["network"], pred_dim)
+        else:
+            model = DTIModel(config["network"], pred_dim)
+        if args.init_checkpoint != "None":
+            ckpt = torch.load(args.init_checkpoint)
+            if args.param_key != "None":
+                ckpt = ckpt[args.param_key]
+            model.load_state_dict(ckpt)
+        device = torch.device(args.device)
+        model = model.to(device)
+        
+        model = train_dti(train_loader, test_loader, model, args, device)
+        results = eval_dti("test", test_loader, model, args, device)
+        logger.info(", ".join(["%s: %.4lf" % (k, v) for k, v in results.items()]))
     elif args.mode == "kfold":
         results = []
         for i in range(dataset.nfolds):
             logger.info("Fold %d", i)
             train_dataset = dataset.index_select(dataset.folds[i]["train"])
             test_dataset = dataset.index_select(dataset.folds[i]["test"])
-            train_dataset._build(test_dataset.pair_index, os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + "-fold" + str(i) + ".pkl"))
-            test_dataset._build(test_dataset.pair_index, os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + "-fold" + str(i) + ".pkl"))
+            train_dataset._build(
+                test_dataset.pair_index, 
+                None if "kg" not in config["data"]["drug"]["modality"] else os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + "-" + args.split_strategy + "-fold" + str(i) + ".pkl")
+            )
+            test_dataset._build(
+                test_dataset.pair_index, 
+                None if "kg" not in config["data"]["drug"]["modality"] else os.path.join(config["data"]["drug"]["featurizer"]["kg"]["save_path"], "dti-" + args.dataset + "-" + args.split_strategy + "-fold" + str(i) + ".pkl")
+            )
             collator = DTICollator(config["data"])
             train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True, num_workers=args.num_workers, collate_fn=collator)
             test_loader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
+            
+            # prepare model
+            if len(config["data"]["drug"]["modality"]) > 1:
+                model = DeepEIK4DTI(config["network"], pred_dim)
+            else:
+                model = DTIModel(config["network"], pred_dim)
+            #print(model)
+            if args.init_checkpoint != "None":
+                ckpt = torch.load(args.init_checkpoint)
+                if args.param_key != "None":
+                    ckpt = ckpt[args.param_key]
+                model.load_state_dict(ckpt)
+            device = torch.device(args.device)
+            model = model.to(device)
+            
             model = train_dti(train_loader, test_loader, model, args, device)
             results.append(eval_dti("test", test_loader, model, args, device))
         results = metrics_average(results)

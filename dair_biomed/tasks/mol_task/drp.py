@@ -20,7 +20,7 @@ from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from scipy.stats import pearsonr
 
 from datasets.drp_dataset import *
-from models.tgsa import TGDRP
+from models.drp_model import TGDRP
 from utils import EarlyStopping, AverageMeter, roc_auc, metrics_average
 
 SUPPORTED_DRP_MODEL = {

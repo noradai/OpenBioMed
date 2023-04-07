@@ -32,6 +32,8 @@ class PromptGenDataset(Text2MolGenDataset):
             'The molecule is not soluable in water.',
             'The molecule has high permeability.',
             'The molecule has low permeability.',
+            'The molecule is like Felodipine.',
+            'The molecule is like Lercanidipine.'
         ]
         """
         self.texts = [

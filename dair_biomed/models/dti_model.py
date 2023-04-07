@@ -29,7 +29,7 @@ class MLP(nn.Module):
                     self.model.append(nn.BatchNorm1d())
     
     def forward(self, h):
-        return self.model(h)
+        return self.model(h).squeeze()
 
 
 class DTIModel(nn.Module):

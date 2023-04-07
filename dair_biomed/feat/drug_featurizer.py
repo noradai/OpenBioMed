@@ -556,7 +556,7 @@ class DrugMGNNFeaturizer(BaseFeaturizer):
         
         atom_features_list = []
         for atom in mol.GetAtoms():
-            encoding = self.one_of_k_encoding(atom.GetSymbol(), self.allowable_atom_list)
+            encoding = self.one_of_k_encoding_unk(atom.GetSymbol(), self.allowable_atom_list)
             encoding += self.one_of_k_encoding(atom.GetDegree(), self.allowable_degree_list)
             encoding += self.one_of_k_encoding_unk(atom.GetTotalNumHs(), self.allowable_num_hs_list)
             encoding += self.one_of_k_encoding_unk(atom.GetImplicitValence(), self.allowable_implicit_valence_list)
@@ -567,16 +567,20 @@ class DrugMGNNFeaturizer(BaseFeaturizer):
             except:
                 encoding += [0, 0]
             encoding += [atom.HasProp("_ChiralityPossible")]
+            encoding /= np.sum(encoding)
             atom_features_list.append(encoding)
         x = torch.tensor(np.array(atom_features_list), dtype=torch.float)
 
-        edges_list = []
-        for bond in mol.GetBonds():
-            i = bond.GetBeginAtomIdx()
-            j = bond.GetEndAtomIdx()
-            edges_list.append((i, j))
-            edges_list.append((j, i))
-        edge_index = torch.tensor(np.array(edges_list).T, dtype=torch.long)
+        if len(mol.GetBonds()) <= 0:
+            edge_index = torch.empty((2, 0), dtype=torch.long)
+        else:
+            edges_list = []
+            for bond in mol.GetBonds():
+                i = bond.GetBeginAtomIdx()
+                j = bond.GetEndAtomIdx()
+                edges_list.append((i, j))
+                edges_list.append((j, i))
+            edge_index = torch.tensor(np.array(edges_list).T, dtype=torch.long)
         
         return Data(x=x, edge_index=edge_index)
 
@@ -682,6 +686,10 @@ def unit_test():
         "max_length": 32
     })(smi)
     print(data)
+
+    smi = "OC(=O)C1=CC(=CC=C1O)\\N=N\\C1=CC=C(C=C1)S(=O)(=O)NC1=NC=CC=C1"
+    data = DrugMGNNFeaturizer({})(smi)
+    print(data.x, data.edge_index)
 
 def featurize_file(args):
     with open(args.smiles_file, "r") as f:

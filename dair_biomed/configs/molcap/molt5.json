@@ -1,5 +1,5 @@
 {
-    "model": "MoMu-T5",
+    "model": "MolT5",
     "data": {
         "drug": {
             "modality": ["structure", "text"],
@@ -10,7 +10,7 @@
                     "SMILES": {
                         "name": "transformer",
                         "transformer_type": "t5",
-                        "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-small-smiles2caption",
+                        "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base",
                         "max_length": 512
                     }
                 },
@@ -18,14 +18,14 @@
                     "name": "TransformerTokenizer",
                     "transformer_type": "t5",
                     "max_length": 512,
-                    "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-small-smiiles2caption"
+                    "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base"
                 }
             }
         }
     },
     "network": {
         "text": {
-            "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-small-smiles2caption",
+            "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base",
             "transformer_type": "t5",
             "stop_grad": true
         }

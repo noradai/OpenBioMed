@@ -142,10 +142,9 @@ if __name__ == "__main__":
     decoder = SUPPORTED_DRUG_DECODER[decoder_config["model"]](decoder_config["network"])
 
     if args.technique == "z_optimize":
-
-        anchor = Chem.MolFromSmiles("CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1")
-        print("anchor: CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1 log_p:", Descriptors.MolLogP(anchor))
-        img = Draw.MolsToGridImage([anchor], legends=['CCC(=O)N1CCN(C2=CC=CC=C2NC(=O)COC2=CC(C)=C(Cl)C(C)=C2)CC1'],
+        anchor = Chem.MolFromSmiles("COC(=O)C1=C(C)N(C)C(C)=C(C(=O)OC)C1c1ccc(Cl)cc1")
+        print("anchor: COC(=O)C1=C(C)N(C)C(C)=C(C(=O)OC)C1c1ccc(Cl)cc1 log_p:", Descriptors.MolLogP(anchor), "TPSA:", Descriptors.TPSA(anchor))
+        img = Draw.MolsToGridImage([anchor], legends=['COC(=O)C1=C(C)N(C)C(C)=C(C(=O)OC)C1c1ccc(Cl)cc1'],
                                            molsPerRow=1, subImgSize=(300, 300))
         img.save(os.path.join(args.save_path, 'anchor.png'))
 

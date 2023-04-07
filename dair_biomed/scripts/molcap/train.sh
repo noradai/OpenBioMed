@@ -1,7 +1,7 @@
 #!/bin/bash
 MODE="traintest"
 MODEL="molalbef"
-DEVICE="cuda:1"
+DEVICE="cuda:0"
 EPOCHS=200
 
 python tasks/multi_modal_task/molcap.py \
@@ -14,7 +14,7 @@ python tasks/multi_modal_task/molcap.py \
 --mode ${MODE} \
 --epochs ${EPOCHS} \
 --num_workers 1 \
---batch_size 16 \
+--batch_size 8 \
 --logging_steps 300 \
 --patience 200 \
 --text2mol_bert_path ../ckpts/bert_ckpts/scibert_scivocab_uncased/ \

@@ -12,7 +12,7 @@ import torch
 
 from rdkit import Chem
 
-from utils.gene_select import hugo2ncbi
+from utils.cell_utils import load_hugo2ncbi
 
 class KG(object):
     def  __init__(self):
@@ -52,21 +52,21 @@ class BMKG(KG):
             if iso_smi in self.smi2drugid:
                 link_drug += 1
                 drug2kg[smi] = self.smi2drugid[iso_smi]
-                drug2text[smi] = self.drugs[self.smi2drugid[iso_smi]]["text"]
+                drug2text[smi] = self.drugs[self.smi2drugid[iso_smi]]["text"].lower()
             else:
                 drug2kg[smi] = None
-                drug2text[smi] = "No description for the drug is available."
+                drug2text[smi] = ""
         protein2kg, protein2text = {}, {}
         for seq in dataset.proteins:
             if seq in self.seq2proteinid:
                 link_protein += 1
                 protein2kg[seq] = self.seq2proteinid[seq]
-                protein2text[seq] = self.proteins[self.seq2proteinid[seq]]["text"]
+                protein2text[seq] = self.proteins[self.seq2proteinid[seq]]["text"].lower()
             else:
                 protein2kg[seq] = None
-                protein2text[seq] = "No description for the protein is available."
+                protein2text[seq] = ""
         logger.info("Linked drug %d/%d" % (link_drug, len(dataset.smiles)))
-        logger.info("Linked proteien %d/%d" % (link_protein, len(dataset.proteins)))
+        logger.info("Linked protein %d/%d" % (link_protein, len(dataset.proteins)))
         return drug2kg, drug2text, protein2kg, protein2text
  
 class BMKGv2(KG):
@@ -88,6 +88,7 @@ class STRING(KG):
     def __init__(self, path, thresh=0.95):
         super(STRING, self).__init__()
         self.thresh = thresh
+        _, self.hugo2ncbi = load_hugo2ncbi()
         self._load_proteins(path)
         self._load_edges(path)
 
@@ -130,7 +131,7 @@ class STRING(KG):
 
     def node_subgraph(self, node_idx, format="hugo"):
         if format == "hugo":
-            node_idx = [hugo2ncbi[x] for x in node_idx]
+            node_idx = [self.hugo2ncbi[x] for x in node_idx]
         node_idx = [self.ncbi2ensp[x] if x in self.ncbi2ensp else x for x in node_idx]
         ensp2subgraphid = dict(zip(node_idx, range(len(node_idx))))
         names_ensp = list(self.proteins.keys())

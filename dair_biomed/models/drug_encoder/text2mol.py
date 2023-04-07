@@ -8,11 +8,15 @@ import torch.nn.functional as F
 
 from transformers import BertModel, BertTokenizer
 from utils import ToDevice
+from utils.mol_utils import load_mol2vec
 
 class Text2MolMLP(nn.Module):
-    def __init__(self, ninp, nout, nhid, model_name_or_path, cid2smiles_path, cid2vec_path):
+    def __init__(self, ninp, nout, nhid, model_name_or_path, cid2smiles_path, cid2vec_path, mol2vec_output_path=None):
         super(Text2MolMLP, self).__init__()
-        self._prepare_smi2vec(cid2smiles_path, cid2vec_path)
+        if mol2vec_output_path is not None:
+            self.smiles2vec = load_mol2vec(mol2vec_output_path)
+        else:
+            self._prepare_smi2vec(cid2smiles_path, cid2vec_path)
         self.text_hidden1 = nn.Linear(ninp, nout)
 
         self.ninp = ninp
@@ -24,7 +28,7 @@ class Text2MolMLP(nn.Module):
         self.mol_hidden3 = nn.Linear(nhid, nout)
         
         self.temp = nn.Parameter(torch.Tensor([0.07]))
-        self.register_parameter('temp', self.temp )
+        self.register_parameter('temp', self.temp)
 
         self.ln1 = nn.LayerNorm((nout))
         self.ln2 = nn.LayerNorm((nout))

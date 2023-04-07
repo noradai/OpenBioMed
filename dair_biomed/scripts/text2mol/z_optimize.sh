@@ -8,7 +8,7 @@ ENCODER_PARAM_KEY="None"
 
 if [ $ENCODER = "molalbef" ]; 
 then
-    ENCODER_CKPT="../ckpts/fusion_ckpts/molalbef-ke/checkpoint_399.pth"
+    ENCODER_CKPT="../ckpts/fusion_ckpts/molalbef-prompt-tune/checkpoint_4.pth"
     ENCODER_PARAM_KEY="model"
 elif [ $ENCODER = "momu" ]; 
 then

@@ -143,9 +143,14 @@ class MolALBEF(nn.Module):
         drug_embeds, _ = self.graph_encoder(structure, x, atomic_num_list, device)
         return self.graph_proj_head(drug_embeds) 
 
-    def encode_text(self, text):
+    def encode_text(self, text, return_cls=True, proj=True):
         text_embeds = self.text_encoder.bert(text["input_ids"], attention_mask=text["attention_mask"], mode='text', return_dict=True)["last_hidden_state"]
-        return self.text_proj_head(text_embeds[:, 0, :])
+        if return_cls:
+            text_embeds = text_embeds[:, 0, :]
+        if proj:
+            return self.text_proj_head(text_embeds)
+        else:
+            return text_embeds
 
     def encode_knowledge(self, kg):
         return self.predict(kg)

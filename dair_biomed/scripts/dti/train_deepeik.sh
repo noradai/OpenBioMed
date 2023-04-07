@@ -1,12 +1,13 @@
 #!/bin/bash
 MODE="train"
 MODEL="deepeik"
-DEVICE="cuda:0"
-EPOCHS=300
+BASE="mgraphdta"
+DEVICE=1
+EPOCHS=500
 
-python tasks/mol_task/dti.py \
---device ${DEVICE} \
---config_path ./configs/dti/${MODEL}.json \
+CUDA_VISIBLE_DEVICES=${DEVICE} python tasks/mol_task/dti.py \
+--device cuda:0 \
+--config_path ./configs/dti/${MODEL}-${BASE}.json \
 --dataset yamanishi08 \
 --dataset_path ../datasets/dti/Yamanishi08 \
 --output_path ../ckpts/finetune_ckpts/dti/${MODEL}.pth \
@@ -16,4 +17,4 @@ python tasks/mol_task/dti.py \
 --batch_size 128 \
 --lr 1e-3 \
 --logging_steps 50 \
---patience 20
+--patience 200

@@ -14,7 +14,7 @@ from torch_geometric.data import Batch
 
 from feat.drug_featurizer import SUPPORTED_DRUG_FEATURIZER, DrugMultiModalFeaturizer
 from feat.cell_featurizer import SUPPORTED_CELL_FEATURIZER
-from utils.gene_select import SUPPORTED_GENE_SELECTOR
+from utils.cell_utils import SUPPORTED_GENE_SELECTOR
 
 def _collate_TGSA(samples):
     drugs, cells, labels = map(list, zip(*samples))
