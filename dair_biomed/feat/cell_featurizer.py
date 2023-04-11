@@ -55,7 +55,19 @@ class CellTGSAFeaturizer(BaseFeaturizer):
             )
         return feat
 
+class CellBarFeaturizer(BaseFeaturizer):
+    def __init__(self, config):
+        super(CellBarFeaturizer, self).__init__()
+        self.n_bars = config["n_bars"] + 2
+
+    def __call__(self, data):
+        data = data.toarray()[0]
+        data[data > self.n_bars - 2] = self.n_bars - 2
+        data = torch.from_numpy(data).long()
+        return torch.cat((data, torch.tensor([0])))
+
 SUPPORTED_CELL_FEATURIZER = {
+    "Bar": CellBarFeaturizer,
     "TGSA": CellTGSAFeaturizer,
 }
     

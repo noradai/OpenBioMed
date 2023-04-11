@@ -1,8 +1,10 @@
 import os
 import numpy as np
+import random
 import torch
 
 import datetime
+from utils.ditributed_utils import mean_reduce
 
 class BestMeter(object):
     """Computes and stores the best value"""
@@ -33,8 +35,12 @@ class BestMeter(object):
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
-    def __init__(self):
+    def __init__(self, distributed=False, local_rank=0, dest_device=0, world_size=1):
         self.reset()
+        self.distributed = distributed
+        self.local_rank = local_rank
+        self.dest_device = dest_device
+        self.world_size = world_size
 
     def reset(self):
         self.val = 0
@@ -49,6 +55,8 @@ class AverageMeter(object):
 
     def get_average(self):
         self.avg = self.sum / (self.count + 1e-12)
+        if self.distributed:
+            return mean_reduce(self.avg)
 
         return self.avg
 
@@ -229,3 +237,19 @@ def cycle(iterable):
     while True:
         for x in iterable:
             yield x
+
+def seed_all(seed_value, cuda_deterministic=False):
+    random.seed(seed_value)
+    os.environ['PYTHONHASHSEED'] = str(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed_value)
+        torch.cuda.manual_seed_all(seed_value)
+    # Speed-reproducibility tradeoff https://pytorch.org/docs/stable/notes/randomness.html
+    if cuda_deterministic:  # slower, more reproducible
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+    else:  # faster, less reproducible
+        torch.backends.cudnn.deterministic = False
+        torch.backends.cudnn.benchmark = True
