@@ -8,6 +8,8 @@ from rdkit.Chem import MolStandardize
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
+import torch
+
 def valid_smiles(smi):
     try:
         mol = Chem.MolFromSmiles(smi.strip("\n"))
@@ -87,6 +89,28 @@ def link_datasets(source, target):
         except:
             match_indexes.append(-1)
     return match_indexes
+
+def convert_pyg_batch(output, batch_idx, max_n_nodes):
+    batch_size = output.shape[0]
+    batch_output = []
+    batch_attention_mask = []
+    for i in range(batch_size):
+        feat = output[torch.where(batch_idx == i)]
+        if feat.shape[0] < max_n_nodes:
+            batch_output.append(torch.cat((
+                feat,
+                torch.zeros(max_n_nodes - feat.shape[0], feat.shape[1]).to(feat.device)
+            ), dim=0))
+            batch_attention_mask.append(torch.cat((
+                torch.ones(feat.shape[0]).to(feat.device), 
+                torch.zeros(max_n_nodes - feat.shape[0]).to(feat.device)
+            ), dim=0))
+        else:
+            batch_output.append(feat[:max_n_nodes, :])
+            batch_attention_mask.append(torch.ones(max_n_nodes).to(feat.device))
+    batch_output = torch.stack(batch_output, dim=0)
+    batch_attention_mask = torch.stack(batch_attention_mask, dim=0)
+    return batch_output, batch_attention_mask
 
 def add_argument(parser):
     parser.add_argument("--mode", type=str, choices=["write_sdf", "unittest"])

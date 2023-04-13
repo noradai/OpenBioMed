@@ -7,6 +7,8 @@ from models.drug_encoder.pyg_gnn import PygGNN
 from models.text_encoder.xbert import BertConfig, BertForMaskedLM
 from models.knowledge_encoder.transe import TransE
 
+from utils.mol_utils import convert_pyg_batch
+
 class MolALBEF(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -54,28 +56,11 @@ class MolALBEF(nn.Module):
         all_node_feats = self.graph_linear(node_embeds)
         # serialize node feature
         batch_size = mol_feats.shape[0]
-        node_feats = []
-        node_attention_mask = []
-        for i in range(batch_size):
-            feat = all_node_feats[torch.where(mol.batch == i)]
-            if feat.shape[0] < self.max_n_nodes:
-                node_feats.append(torch.cat((
-                    feat,
-                    torch.zeros(self.max_n_nodes - feat.shape[0], feat.shape[1]).to(feat.device)
-                ), dim=0))
-                node_attention_mask.append(torch.cat((
-                    torch.ones(feat.shape[0]).to(feat.device), 
-                    torch.zeros(self.max_n_nodes - feat.shape[0]).to(feat.device)
-                ), dim=0))
-            else:
-                node_feats.append(feat[:self.max_n_nodes, :])
-                node_attention_mask.append(torch.ones(self.max_n_nodes).to(feat.device))
-        node_feats = torch.stack(node_feats, dim=0)
-        node_attention_mask = torch.stack(node_attention_mask, dim=0)
+
+        node_feats, node_attention_mask = convert_pyg_batch(all_node_feats, mol.batch, self.max_n_nodes)
 
         text_outputs = self.text_encoder.bert(text["input_ids"], attention_mask=text["attention_mask"], mode='text', return_dict=True)
         seq_feats = text_outputs["last_hidden_state"]
-        text_feats = F.normalize(self.text_proj_head(seq_feats[:, 0, :]), dim=-1)
         if kg is not None:
             neigh_feats = self.kg_encoder.predict(kg["neigh_indice"])
             neigh_feats = self.kg_linear(neigh_feats)
@@ -118,26 +103,8 @@ class MolALBEF(nn.Module):
             drug_embeds = self.graph_proj_head(drug_embeds)
         if not return_node_feats:
             return drug_embeds
-        batch_size = drug_embeds.shape[0]
-        node_feats = []
-        node_attention_mask = []
-        for i in range(batch_size):
-            feat = node_embeds[torch.where(structure.batch == i)]
-            if feat.shape[0] < self.max_n_nodes:
-                node_feats.append(torch.cat((
-                    feat,
-                    torch.zeros(self.max_n_nodes - feat.shape[0], feat.shape[1]).to(feat.device)
-                ), dim=0))
-                node_attention_mask.append(torch.cat((
-                    torch.ones(feat.shape[0]).to(feat.device), 
-                    torch.zeros(self.max_n_nodes - feat.shape[0]).to(feat.device)
-                ), dim=0))
-            else:
-                node_feats.append(feat[:self.max_n_nodes, :])
-                node_attention_mask.append(torch.ones(self.max_n_nodes).to(feat.device))
-        node_feats = torch.stack(node_feats, dim=0)
-        node_attention_mask = torch.stack(node_attention_mask, dim=0)
-        return drug_embeds, node_feats, node_attention_mask
+        else:
+            return drug_embeds, node_embeds
 
     def encode_structure_with_prob(self, structure, x, atomic_num_list, device):
         drug_embeds, _ = self.graph_encoder(structure, x, atomic_num_list, device)

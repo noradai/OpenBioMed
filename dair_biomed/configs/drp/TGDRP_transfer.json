@@ -23,6 +23,7 @@
         }
     },
     "network": {
+        "input_dim_cell": 1,
         "layer_drug": 3,
         "dim_drug": 128,
         "layer_cell": 3,

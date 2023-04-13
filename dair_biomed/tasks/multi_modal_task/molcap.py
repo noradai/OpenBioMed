@@ -22,9 +22,9 @@ from rouge_score import rouge_scorer
 
 from datasets.molcap_dataset import SUPPORTED_MOLCAP_DATASET
 from models.drug_encoder import Text2MolMLP
-from models.molcap_model import GraphEnhancedMolCapModel
+from models.molcap_model import MolCapModel, GraphEnhancedMolCapModel
 
-from utils import AverageMeter, EarlyStopping, ToDevice, DrugCollator
+from utils import AverageMeter, ToDevice, DrugCollator
 
 def train_molcap(train_loader, val_loader, test_loader, test_dataset, model, args, device):
     requires_grad = []
@@ -179,7 +179,10 @@ if __name__ == "__main__":
     test_dataloader = DataLoader(test_dataset, args.batch_size, shuffle=False, collate_fn=collator, num_workers=args.num_workers)
 
     # load model
-    model = GraphEnhancedMolCapModel(config["network"])
+    if config["data"]["drug"]["featurizer"]["structure"]["name"] == "MultiScale":
+        model = GraphEnhancedMolCapModel(config["network"])
+    else:
+        model = MolCapModel(config["network"])
     model = model.to(device)
 
     if args.mode == "train":

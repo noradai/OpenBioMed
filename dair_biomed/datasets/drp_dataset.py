@@ -16,12 +16,6 @@ from feat.drug_featurizer import SUPPORTED_DRUG_FEATURIZER, DrugMultiModalFeatur
 from feat.cell_featurizer import SUPPORTED_CELL_FEATURIZER
 from utils.cell_utils import SUPPORTED_GENE_SELECTOR
 
-def _collate_TGSA(samples):
-    drugs, cells, labels = map(list, zip(*samples))
-    batched_drug = Batch.from_data_list(drugs)
-    batched_cell = Batch.from_data_list(cells)
-    return batched_drug, batched_cell, torch.tensor(labels)
-
 class DRPDataset(Dataset, ABC):
     def __init__(self, path, config, task="regression"):
         super(DRPDataset, self).__init__()
@@ -41,13 +35,13 @@ class DRPDataset(Dataset, ABC):
         if len(self.config["drug"]["modality"]) > 1:
             featurizer = DrugMultiModalFeaturizer(self.config["drug"])
         else:
-            featurizer = SUPPORTED_DRUG_FEATURIZER[self.config["drug"]["featurizer"]["structure"]["name"]](**self.config["drug"]["featurizer"]["structure"])
+            featurizer = SUPPORTED_DRUG_FEATURIZER[self.config["drug"]["featurizer"]["structure"]["name"]](self.config["drug"]["featurizer"]["structure"])
         for key in self.drug_dict:
             smi = self.drug_dict[key]
             self.drug_dict[key] = featurizer(smi)
         
         # featurize cell
-        featurizer = SUPPORTED_CELL_FEATURIZER[self.config["cell"]["featurizer"]["name"]](**self.config["cell"]["featurizer"])
+        featurizer = SUPPORTED_CELL_FEATURIZER[self.config["cell"]["featurizer"]["name"]](self.config["cell"]["featurizer"])
         self.cell_dict = featurizer(self.cell_dict)
         if self.config["cell"]["featurizer"]["name"] == "TGSA":
             self.predefined_cluster = featurizer.predefined_cluster
@@ -167,11 +161,6 @@ class TCGA(DRPDataset):
         self.drug_index = df["smiles"].to_numpy()
         self.cell_index = df["bcr_patient_barcode"].to_numpy()
         self.response = df["label"].to_numpy().astype(np.float)
-
-SUPPORTED_DRP_COLLATE_FN = {
-    "TGSA": _collate_TGSA,
-    "TGDRP": _collate_TGSA,
-}
 
 SUPPORTED_DRP_DATASET = {
     "GDSC": GDSC,

@@ -5,10 +5,10 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
+import argparse
 import copy
 import math
-import random
-import argparse
+import numpy as np
 import json
 from tqdm import tqdm
 
@@ -19,33 +19,14 @@ from torch.utils.data import DataLoader
 from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
 from scipy.stats import pearsonr
 
-from datasets.drp_dataset import *
+from datasets.drp_dataset import SUPPORTED_DRP_DATASET, TCGA
 from models.drp_model import TGDRP
-from utils import EarlyStopping, AverageMeter, roc_auc, metrics_average
+from utils import EarlyStopping, AverageMeter, seed_all, roc_auc, metrics_average
+from utils.collators import DRPCollator
 
 SUPPORTED_DRP_MODEL = {
     "TGDRP": TGDRP,
 }
-
-def add_arguments(parser):
-    parser.add_argument('--seed', type=int, default=42, help='seed')
-    parser.add_argument('--device', type=str, default='cuda:0', help='device')
-    parser.add_argument('--task', type=str, default='regression', help='task type: classification or regression')
-    parser.add_argument('--dataset', type=str, default='GDSC', help='dataset')
-    parser.add_argument("--dataset_path", type=str, default='../datasets/drp/GDSC/', help='path to the dataset')
-    parser.add_argument('--config_path', type=str, help='path to the configuration file')
-    parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)')
-    parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
-    parser.add_argument('--weight_decay', type=float, default=0, help='weight decay')
-    parser.add_argument('--epochs', type=int, default=300, help='maximum number of epochs (default: 300)')
-    parser.add_argument('--patience', type=int, default=10, help='patience for earlystopping (default: 10)')
-    parser.add_argument('--setup', type=str, default='known', help='experimental setup')
-    parser.add_argument('--pretrain', action='store_true')
-    parser.add_argument('--weight_path', type=str, default='', help='filepath for pretrained weights')
-    parser.add_argument('--mode', type=str, default='test', help='train, test or zero-shot transfer')
-
-    # arguments for zero-shot transfer
-    parser.add_argument("--transfer_dataset_path", type=str, default='../datasets/drp/tcga', help='path to the transfer dataset')
 
 def train_drp(train_loader, val_loader, model, args):
     if args.task == "classification":
@@ -118,34 +99,25 @@ def val_drp(val_loader, model, args):
     logger.info(" ".join(["%s: %.4lf" % (key, results[key]) for key in results]))
     return results
 
-if __name__ == "__main__":
-    logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-    )
-
-    parser = argparse.ArgumentParser()
-    add_arguments(parser)
-    args = parser.parse_args()
-    config = json.load(open(args.config_path, "r"))
-
+def main(args, config):
     # set random seed
-    random.seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    seed_all(args.seed)
 
     # build dataset
     dataset = SUPPORTED_DRP_DATASET[args.dataset](args.dataset_path, config["data"], task=args.task)
-    collate_fn = SUPPORTED_DRP_COLLATE_FN[config["model"]]
+    collate_fn = DRPCollator(config["data"])
 
     # build model
-    config["network"]["input_dim_cell"] = len(config["data"]["cell"]["gene_feature"])
     model = SUPPORTED_DRP_MODEL[config["model"]](config["network"])
     if config["model"] in ["TGSA", "TGDRP"]:
         model.cluster_predefine = {i: j.to(args.device) for i, j in dataset.predefined_cluster.items()}
         model._build()
     model = model.to(args.device)
+    if args.init_checkpoint != '':
+        ckpt = torch.load(args.weight_path)
+        if args.param_key != '':
+            ckpt = ckpt[args.param_key]
+        model.load_state_dict(ckpt)
 
     if args.mode == "train":
         train_dataset = dataset.index_select(dataset.train_indexes)
@@ -155,9 +127,6 @@ if __name__ == "__main__":
         train_loader = DataLoader(train_dataset, args.batch_size, shuffle=True, num_workers=4, collate_fn=collate_fn)
         val_loader = DataLoader(val_dataset, args.batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
         test_loader = DataLoader(test_dataset, args.batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
-
-        if args.pretrain:
-            model.GNN_drug.load_state_dict(torch.load(args.weight_path)['model_state_dict'])
 
         model = train_drp(train_loader, val_loader, model, args)
         val_drp(test_loader, model, args)
@@ -192,3 +161,38 @@ if __name__ == "__main__":
         for patient in all_patients:
             mean, std = metrics_average(results[patient])["roc_auc"]
             print("roc_auc on TCGA-%s: %.4lf±%.4lf" % (patient, mean, std))
+
+def add_arguments(parser):
+    parser.add_argument('--seed', type=int, default=42, help='seed')
+    parser.add_argument('--device', type=str, default='cuda:0', help='device')
+    parser.add_argument('--task', type=str, default='regression', help='task type: classification or regression')
+    parser.add_argument('--dataset', type=str, default='GDSC', help='dataset')
+    parser.add_argument("--dataset_path", type=str, default='../datasets/drp/GDSC/', help='path to the dataset')
+    parser.add_argument('--config_path', type=str, help='path to the configuration file')
+    parser.add_argument('--batch_size', type=int, default=128, help='batch size (default: 128)')
+    parser.add_argument('--num_workers', type=int, default=4, help='number of workers (default: 4)')
+    parser.add_argument('--lr', type=float, default=0.0001, help='learning rate')
+    parser.add_argument('--weight_decay', type=float, default=0, help='weight decay')
+    parser.add_argument('--epochs', type=int, default=300, help='maximum number of epochs (default: 300)')
+    parser.add_argument('--patience', type=int, default=10, help='patience for earlystopping (default: 10)')
+    parser.add_argument('--setup', type=str, default='known', help='experimental setup')
+    parser.add_argument('--init_checkpoint', type=str, default='', help='filepath for pretrained weights')
+    parser.add_argument('--param_key', type=str, default='', help='the key to obtain model state dict')
+    parser.add_argument('--mode', type=str, default='test', help='train, test or zero-shot transfer')
+
+    # arguments for zero-shot transfer
+    parser.add_argument("--transfer_dataset_path", type=str, default='../datasets/drp/tcga', help='path to the transfer dataset')
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
+    )
+
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    args = parser.parse_args()
+    config = json.load(open(args.config_path, "r"))
+
+    main(args, config)
