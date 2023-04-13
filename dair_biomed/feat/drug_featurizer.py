@@ -14,6 +14,7 @@ import torch
 
 import rdkit.Chem as Chem
 from rdkit.Chem import DataStructs, rdmolops
+from rdkit.Chem import AllChem, Descriptors
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 from sklearn.preprocessing import OneHotEncoder
@@ -146,7 +147,7 @@ class DrugOneHotFeaturizer(BaseFeaturizer):
         if len(temp) < self.max_len:
             temp = temp + ['?'] * (self.max_len - len(temp))
         else:
-            temp = temp [:self.max_len]
+            temp = temp[:self.max_len]
         return torch.tensor(self.enc.transform(np.array(temp).reshape(-1, 1)).toarray().T)
 
 class DrugTransformerTokFeaturizer(BaseFeaturizer):
@@ -359,6 +360,7 @@ class DrugGraphFeaturizer(BaseFeaturizer):
     def __call__(self, data):
         if isinstance(data, str):
             mol = Chem.MolFromSmiles(data)
+            # mol = AllChem.MolFromSmiles(data)
         else:
             mol = data
         # atoms
@@ -610,7 +612,129 @@ class DrugMultiScaleFeaturizer(BaseFeaturizer):
             feat[scale] = self.featurizers[scale](data)
         return feat
 
-    
+
+# same with graphmvp   
+class DrugGraphFeaturizerV2(BaseFeaturizer):
+    allowable_features = {
+    'possible_atomic_num_list':       list(range(1, 119)),
+    'possible_formal_charge_list':    [-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5],
+    'possible_chirality_list':        [
+        Chem.rdchem.ChiralType.CHI_UNSPECIFIED,
+        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CW,
+        Chem.rdchem.ChiralType.CHI_TETRAHEDRAL_CCW,
+        Chem.rdchem.ChiralType.CHI_OTHER
+    ],
+    'possible_hybridization_list':    [
+        Chem.rdchem.HybridizationType.S,
+        Chem.rdchem.HybridizationType.SP,
+        Chem.rdchem.HybridizationType.SP2,
+        Chem.rdchem.HybridizationType.SP3,
+        Chem.rdchem.HybridizationType.SP3D,
+        Chem.rdchem.HybridizationType.SP3D2,
+        Chem.rdchem.HybridizationType.UNSPECIFIED
+    ],
+    'possible_numH_list':             [0, 1, 2, 3, 4, 5, 6, 7, 8],
+    'possible_implicit_valence_list': [0, 1, 2, 3, 4, 5, 6],
+    'possible_degree_list':           [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'possible_number_radical_e_list': [0, 1, 2, 3, 4, 'misc'],
+    'possible_is_aromatic_list':      [False, True],
+    'possible_is_in_ring_list':       [False, True],
+    'possible_bond_type_list':                 [
+        Chem.rdchem.BondType.SINGLE,
+        Chem.rdchem.BondType.DOUBLE,
+        Chem.rdchem.BondType.TRIPLE,
+        Chem.rdchem.BondType.AROMATIC
+    ],
+    'possible_bond_dirs':             [  # only for double bond stereo information
+        Chem.rdchem.BondDir.NONE,
+        Chem.rdchem.BondDir.ENDUPRIGHT,
+        Chem.rdchem.BondDir.ENDDOWNRIGHT
+    ],
+    'possible_bond_stereo_list':      [
+            Chem.rdchem.BondStereo.STEREONONE,
+            Chem.rdchem.BondStereo.STEREOZ,
+            Chem.rdchem.BondStereo.STEREOE,
+            Chem.rdchem.BondStereo.STEREOCIS,
+            Chem.rdchem.BondStereo.STEREOTRANS,
+            Chem.rdchem.BondStereo.STEREOANY,
+        ], 
+    'possible_is_conjugated_list': [False, True]
+    }
+    def __init__(self, config):
+        super(DrugGraphFeaturizerV2, self).__init__()
+        self.config = config
+
+    def __call__(self, data):
+        # mol = Chem.MolFromSmiles(data)
+        mol = AllChem.MolFromSmiles(data)
+        # atoms
+        atom_features_list = []
+        for atom in mol.GetAtoms():
+            if self.config["name"] == "ogb":
+                atom_feature = [
+                    safe_index(self.allowable_features['possible_atomic_num_list'], atom.GetAtomicNum()),
+                    self.allowable_features['possible_chirality_list'].index(atom.GetChiralTag()),
+                    safe_index(self.allowable_features['possible_degree_list'], atom.GetTotalDegree()),
+                    safe_index(self.allowable_features['possible_formal_charge_list'], atom.GetFormalCharge()),
+                    safe_index(self.allowable_features['possible_numH_list'], atom.GetTotalNumHs()),
+                    safe_index(self.allowable_features['possible_number_radical_e_list'], atom.GetNumRadicalElectrons()),
+                    safe_index(self.allowable_features['possible_hybridization_list'], atom.GetHybridization()),
+                    self.allowable_features['possible_is_aromatic_list'].index(atom.GetIsAromatic()),
+                    self.allowable_features['possible_is_in_ring_list'].index(atom.IsInRing()),
+                ]
+            else:
+                """
+                atom_feature = [
+                    safe_index(self.allowable_features['possible_atomic_num_list'], atom.GetAtomicNum()),
+                    self.allowable_features['possible_chirality_list'].index(atom.GetChiralTag())
+                ]
+                """
+                atom_feature = [self.allowable_features['possible_atomic_num_list'].index(atom.GetAtomicNum())] + \
+                       [self.allowable_features['possible_chirality_list'].index(atom.GetChiralTag())]
+            atom_features_list.append(atom_feature)
+        x = torch.tensor(np.array(atom_features_list), dtype=torch.long)
+
+        # bonds
+        if len(mol.GetBonds()) <= 0:  # mol has no bonds
+            num_bond_features = 3 if self.config["name"] == "ogb" else 2
+            edge_index = torch.empty((2, 0), dtype=torch.long)
+            edge_attr = torch.empty((0, num_bond_features), dtype=torch.long)
+        else:  # mol has bonds
+            edges_list = []
+            edge_features_list = []
+            for bond in mol.GetBonds():
+                i = bond.GetBeginAtomIdx()
+                j = bond.GetEndAtomIdx()
+                if self.config["name"] == "ogb":
+                    edge_feature = [
+                        safe_index(self.allowable_features['possible_bond_type_list'], bond.GetBondType()),
+                        self.allowable_features['possible_bond_stereo_list'].index(bond.GetStereo()),
+                        self.allowable_features['possible_is_conjugated_list'].index(bond.GetIsConjugated()),
+                    ]
+                else:
+                    """
+                    edge_feature = [
+                        self.allowable_features['possible_bond_type_list'].index(bond.GetBondType()),
+                        self.allowable_features['possible_bond_dirs'].index(bond.GetBondDir())
+                    ]
+                    """
+                    edge_feature = [self.allowable_features['possible_bond_type_list'].index(bond.GetBondType())] + \
+                           [self.allowable_features['possible_bond_dirs'].index(bond.GetBondDir())]
+                edges_list.append((i, j))
+                edge_features_list.append(edge_feature)
+                edges_list.append((j, i))
+                edge_features_list.append(edge_feature)
+
+            # data.edge_index: Graph connectivity in COO format with shape [2, num_edges]
+            edge_index = torch.tensor(np.array(edges_list).T, dtype=torch.long)
+
+            # data.edge_attr: Edge feature matrix with shape [num_edges, num_edge_features]
+            edge_attr = torch.tensor(np.array(edge_features_list), dtype=torch.long)
+
+        data = Data(x=x, edge_index=edge_index, edge_attr=edge_attr)
+
+        return data
+
 class DrugMultiModalFeaturizer(BaseFeaturizer):
     def __init__(self, config):
         super(DrugMultiModalFeaturizer, self).__init__()
@@ -645,6 +769,7 @@ class DrugMultiModalFeaturizer(BaseFeaturizer):
             return None
         return self.featurizers[index]
 
+
 SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "OneHot": DrugOneHotFeaturizer,
     "KV-PLM*": DrugBPEFeaturizer,
@@ -653,7 +778,7 @@ SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "TGSA": DrugTGSAFeaturizer,
     "ogb": DrugGraphFeaturizer,
     "MGNN": DrugMGNNFeaturizer,
-    "BaseGNN": DrugGraphFeaturizer,
+    "BaseGNN": DrugGraphFeaturizerV2,
 }
 
 SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER = copy.deepcopy(SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER)

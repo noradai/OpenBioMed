@@ -5,6 +5,8 @@ import math
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem.Scaffolds.MurckoScaffold import MurckoScaffoldSmiles
+import json
+import collections
 
 from utils.cluster import cluster_with_sim_matrix, merge_cluster
 from utils.prot_utils import get_normalized_ctd
@@ -20,12 +22,15 @@ def kfold_split(n, k):
     perm = np.random.permutation(n)
     return [perm[i * n // k: (i + 1) * n // k] for i in range(k)]
 
-def _generate_scaffold(smiles, include_chirality=False):
-    mol = Chem.MolFromSmiles(smiles)
-    scaffold = MurckoScaffoldSmiles(mol=mol, includeChirality=include_chirality)
+def _generate_scaffold(smiles, include_chirality=False, is_standard=False):
+    if is_standard:
+        scaffold = MurckoScaffoldSmiles(smiles=smiles, includeChirality=True)
+    else:
+        mol = Chem.MolFromSmiles(smiles)
+        scaffold = MurckoScaffoldSmiles(mol=mol, includeChirality=include_chirality)
     return scaffold
 
-def generate_scaffolds(dataset, log_every_n=1000, sort=True):
+def generate_scaffolds(dataset, log_every_n=1000, sort=True, is_standard=False):
     scaffolds = {}
     data_len = len(dataset)
 
@@ -33,7 +38,7 @@ def generate_scaffolds(dataset, log_every_n=1000, sort=True):
     for ind, smiles in enumerate(dataset.smiles):
         if log_every_n > 0 and ind % log_every_n == 0:
             logger.info("Generating scaffold %d/%d" % (ind, data_len))
-        scaffold = _generate_scaffold(smiles)
+        scaffold = _generate_scaffold(smiles, is_standard=is_standard)
         if scaffold not in scaffolds:
             scaffolds[scaffold] = [ind]
         else:
@@ -51,11 +56,21 @@ def generate_scaffolds(dataset, log_every_n=1000, sort=True):
         ]
     else:
         scaffold_sets = [value for key, value in scaffolds.items()]
+   
+    # TODO: DEBUG
+    """
+    scaffold_index = collections.OrderedDict()
+    for i, value in enumerate(scaffold_sets):
+        scaffold_index[i] = str(value)
+    scaffold_index = json.dumps(scaffold_index)
+    with open("scaffold_set_2.json","w") as f:
+        f.write(scaffold_index)
+    """
     return scaffold_sets
 
-def scaffold_split(dataset, r_val, r_test, log_every_n=1000):
+def scaffold_split(dataset, r_val, r_test, log_every_n=1000, is_standard=False):
     r_train = 1.0 - r_val - r_test
-    scaffold_sets = generate_scaffolds(dataset, log_every_n)
+    scaffold_sets = generate_scaffolds(dataset, log_every_n, is_standard=is_standard)
 
     train_cutoff = r_train * len(dataset)
     valid_cutoff = (r_train + r_val) * len(dataset)

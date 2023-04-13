@@ -43,6 +43,8 @@ class BaseCollator(ABC):
             for key in data[0]:
                 result[key] = self._collate_single([x[key] for x in data], config[key])
             return result
+        elif isinstance(data[0], int):
+            return torch.tensor(data).view((-1, 1))
 
     def _collate_multiple(self, data, config):
         cor = []
