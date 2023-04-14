@@ -1,13 +1,14 @@
 #!/bin/bash
-MODE="zero_shot"
+MODE="train"
 TASK_MODE="paragraph"
-MODEL="momu"
+MODEL="biomedgpt"
 DEVICE="cuda:0"
 EPOCHS=100
 
-CKPT=""
-PARAM_KEY=""
+CKPT="None"
+PARAM_KEY="None"
 RERANK="no_rerank"
+BATCH_SIZE=64
 
 FILTER_FILE="../datasets/mtr/momu_pretrain/pair.txt"
 
@@ -23,9 +24,10 @@ then
     RERANK="no_rerank"
 elif [ $MODEL = "biomedgpt" ];
 then
-    CKPT="../ckpts/fusion_ckpts/biomedgpt/checkpoint_99.pth"
-    param_key="None"
+    CKPT="../ckpts/fusion_ckpts/biomedgpt/epoch179.pth"
+    PARAM_KEY="None"
     RERANK="no_rerank"
+    BATCH_SIZE=32
 fi
 
 python tasks/multi_modal_task/mtr.py \
@@ -43,6 +45,7 @@ python tasks/multi_modal_task/mtr.py \
 --mode ${MODE} \
 --patience 20 \
 --epochs ${EPOCHS} \
+--train_batch_size ${BATCH_SIZE} \
 --${RERANK} \
 --rerank_num 32 \
 --alpha_m2t 0.9 \

@@ -4,11 +4,12 @@ import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutput
 
 from models.drug_decoder.molt5 import MolT5
-from models.drug_encoder import MoMu, MolALBEF
+from models.drug_encoder import MoMu, MolALBEF, GraphMVP
 
 from utils.mol_utils import convert_pyg_batch
 
 SUPPORTED_DRUG_ENCODER = {
+    "GraphMVP": GraphMVP,
     "MoMu": MoMu,
     "MolALBEF": MolALBEF
 }
@@ -104,7 +105,7 @@ class GraphEnhancedMolCapModel(nn.Module):
         if self.use_node_embeds:
             graph_feats, node_feats = self.graph_encoder.encode_structure(mol["structure"]["graph"], proj=False, return_node_feats=True)
             graph_feats = self.graph_projector(graph_feats)
-            node_feats, node_attention_mask = convert_pyg_batch(node_feats, mol["structure"]["graph"].batch, )
+            node_feats, node_attention_mask = convert_pyg_batch(node_feats, mol["structure"]["graph"].batch, self.max_n_nodes)
             node_feats = self.graph_projector(node_feats)
             h = BaseModelOutput(
                 last_hidden_state=torch.cat([graph_feats.unsqueeze(1), node_feats, smi_feats], dim=1),
@@ -114,10 +115,7 @@ class GraphEnhancedMolCapModel(nn.Module):
             )
             encoder_attention_mask = torch.cat([torch.ones(B, 1).to(device), node_attention_mask, mol["structure"]["SMILES"]["attention_mask"]], dim=1)
         else:
-            if "additional_text" in mol:
-                graph_feats = self.graph_encoder(mol["structure"]["graph"], mol["additional_text"])["last_hidden_state"][:, 0, :]
-            else:
-                graph_feats = self.graph_encoder.encode_structure(mol["structure"]["graph"], proj=False)
+            graph_feats = self.graph_encoder.encode_structure(mol["structure"]["graph"], proj=False)
             graph_feats = self.graph_projector(graph_feats)
             h = BaseModelOutput(
                 last_hidden_state=torch.cat([graph_feats.unsqueeze(1), smi_feats], dim=1),

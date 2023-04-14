@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from utils import EarlyStopping, AverageMeter, DrugCollator, ToDevice, recall_at_k
 from utils.optimizers import BertAdam
 from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
-from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT
+from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT, BioMedGPT
 from models.mtr_model import MTRModel
 
 SUPPORTED_MTR_MODEL = {
@@ -26,6 +26,7 @@ SUPPORTED_MTR_MODEL = {
     "KV-PLM*": KVPLM,
     "MoMu": MoMu, 
     "MolALBEF": MolALBEF,
+    "BioMedGPT": BioMedGPT,
     "combined": MTRModel
 }
 
@@ -201,9 +202,9 @@ def main(args, config):
     collator = DrugCollator(config["data"]["drug"])
 
     model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
-    if args.init_checkpoint != "":
+    if args.init_checkpoint != "None":
         ckpt = torch.load(args.init_checkpoint, map_location="cpu")
-        if args.param_key != "":
+        if args.param_key != "None":
             ckpt = ckpt[args.param_key]
         model.load_state_dict(ckpt)
     model = model.to(args.device)
@@ -226,9 +227,9 @@ def add_arguments(parser):
     parser.add_argument("--dataset_mode", type=str,  default="paragraph")
     parser.add_argument("--filter", action="store_true")
     parser.add_argument("--filter_path", type=str, default="")
-    parser.add_argument("--init_checkpoint", type=str, default="")
+    parser.add_argument("--init_checkpoint", type=str, default="None")
     parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/finetune.pth")
-    parser.add_argument("--param_key", type=str, default="")
+    parser.add_argument("--param_key", type=str, default="None")
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--weight_decay", type=float, default=0)
     parser.add_argument("--lr", type=float, default=5e-5)
@@ -260,7 +261,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     config = json.load(open(args.config_path, "r"))
     if args.dataset_mode == "sentence":
-        config["data"]["drug"]["featurizer"]["text"]["name"] = "BertSentenceTokenizer"
+        config["data"]["drug"]["featurizer"]["text"]["name"] = "TransformerSentenceTokenizer"
         config["data"]["drug"]["featurizer"]["text"]["min_sentence_length"] = 5
 
     main(args, config)

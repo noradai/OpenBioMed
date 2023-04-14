@@ -91,7 +91,7 @@ def link_datasets(source, target):
     return match_indexes
 
 def convert_pyg_batch(output, batch_idx, max_n_nodes):
-    batch_size = output.shape[0]
+    batch_size = torch.max(batch_idx).item() + 1
     batch_output = []
     batch_attention_mask = []
     for i in range(batch_size):

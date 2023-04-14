@@ -18,7 +18,7 @@
                 "text": {
                     "name": "TransformerEncoder",
                     "transformer_type": "bert",
-                    "model_name_or_path": "../ckpts/bert_ckpts/pubmedbert_uncased",
+                    "model_name_or_path": "../ckpts/text_ckpts/pubmedbert_uncased",
                     "max_length": 512,
                     "device": "cuda:0"
                 }
@@ -41,7 +41,7 @@
                 "text": {
                     "name": "TransformerEncoder",
                     "transformer_type": "bert",
-                    "model_name_or_path": "../ckpts/bert_ckpts/pubmedbert_uncased",
+                    "model_name_or_path": "../ckpts/text_ckpts/pubmedbert_uncased",
                     "max_length": 512,
                     "device": "cuda:0"
                 }

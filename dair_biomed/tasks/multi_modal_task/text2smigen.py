@@ -160,7 +160,7 @@ def add_arguments(parser):
     parser.add_argument("--config_path", type=str, default="")
     parser.add_argument('--dataset', type=str, default='chebi-20')
     parser.add_argument("--dataset_path", type=str, default='../datasets/molcap/chebi-20')
-    parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/text2smi.pth")
+    parser.add_argument("--output_path", type=str, default="../ckpts/finetune_ckpts/text2smi/")
     parser.add_argument("--smi_save_path", type=str, default="../assets/outputs.txt")
     parser.add_argument("--mode", type=str, default="train")
     parser.add_argument("--epochs", type=int, default=10)

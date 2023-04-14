@@ -1,20 +1,20 @@
 #!/bin/bash
 MODE="traintest"
-MODEL="molalbef"
-DEVICE="cuda:0"
+MODEL="graphmvp"
+DEVICE="cuda:3"
 EPOCHS=200
 
 python tasks/multi_modal_task/molcap.py \
 --device ${DEVICE} \
---config_path ./configs/molcap/${MODEL}-molt5-multnodes.json \
+--config_path ./configs/molcap/${MODEL}-molt5.json \
 --dataset chebi-20 \
 --dataset_path ../datasets/molcap/chebi-20 \
---output_path ../ckpts/finetune_ckpts/molcap-multnodes-attn/ \
+--output_path ../ckpts/finetune_ckpts/molcap-${MODEL}/ \
 --caption_save_path ../tmps/molcap/${MODEL}-captions.txt \
 --mode ${MODE} \
 --epochs ${EPOCHS} \
 --num_workers 1 \
---batch_size 8 \
+--batch_size 32 \
 --logging_steps 300 \
 --patience 200 \
 --text2mol_bert_path ../ckpts/bert_ckpts/scibert_scivocab_uncased/ \

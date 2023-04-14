@@ -272,3 +272,35 @@ class PygGNN(nn.Module):
         else:
             raise ValueError("not implemented.")
         return self.pooling(node_representation, batch), node_representation
+
+class GraphMVP(nn.Module):
+    def __init__(self, config):
+        super(GraphMVP, self).__init__()
+        self.main_model = PygGNN(
+            num_layer=config["gin_num_layers"],
+            emb_dim=config["gin_hidden_dim"],
+            JK='last',
+            drop_ratio=config["drop_ratio"],
+            gnn_type='gin'
+        )
+        if "projection_dim" in config:
+            self.projector = nn.Linear(config["gin_hidden_dim"], config["projection_dim"])
+        else:
+            self.projector = None
+
+    def forward(self, mol):
+        h_graph, h_node = self.main_model(mol)
+        return h_graph, h_node
+
+    def encode_structure(self, mol, proj=False, return_node_feats=True):
+        h_graph, h_node = self.forward(mol)
+        if proj and self.projector is not None:
+            h_graph = self.projector(h_graph)
+            h_node = self.projector(h_node)
+        if return_node_feats:
+            return h_graph, h_node
+        else:
+            return h_node
+
+    def load_state_dict(self, state_dict, strict=True):
+        return self.main_model.load_state_dict(state_dict, strict)

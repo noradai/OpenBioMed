@@ -1,7 +1,7 @@
 #!/bin/bash
 MODE="train"
 MODEL="deepdta"
-DEVICE="cuda:0"
+DEVICE="cuda:3"
 EPOCHS=300
 
 python tasks/mol_task/dti.py \

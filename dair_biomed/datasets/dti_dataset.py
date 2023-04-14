@@ -179,7 +179,7 @@ class BMKG_DTI(DTIClassificationDataset):
 
 class DTIRegressionDataset(DTIDataset):
     def __init__(self, path, config, split_strategy):
-        super(Davis_KIBA, self).__init__(path, config, split_strategy)
+        super(DTIRegressionDataset, self).__init__(path, config, split_strategy)
 
 class Davis_KIBA(DTIRegressionDataset):
     def __init__(self, path, config, split_strategy):

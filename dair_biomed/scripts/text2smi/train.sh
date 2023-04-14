@@ -10,6 +10,7 @@ python tasks/multi_modal_task/text2smigen.py \
 --config_path ./configs/text2smi/${MODEL}-molt5.json \
 --dataset chebi-20 \
 --dataset_path ../datasets/molcap/chebi-20 \
+--output_path ../ckpts/finetune_ckpts/text2smi/
 --smi_save_path ${SAVE_FILE} \
 --mode ${MODE} \
 --epochs ${EPOCHS} \

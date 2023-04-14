@@ -85,7 +85,7 @@ def eval_dti(split, val_loader, model, args, device):
         prot = ToDevice(prot, device)
         label = label.to(device)
         pred = model(mol, prot)
-        if len(pred.shape) < 2:
+        if args.task == "classification" and len(pred.shape) < 2:
             pred = pred.unsqueeze(0)
         all_loss += loss_fn(pred, label).item()
         if args.task == "classification":

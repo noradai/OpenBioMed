@@ -33,6 +33,8 @@ class TextTransformerTokFeaturizer(TextFeaturizer):
         super(TextTransformerTokFeaturizer, self).__init__()
         self.max_length = config["max_length"]
         self.tokenizer = name2tokenizer[config["transformer_type"]].from_pretrained(config["model_name_or_path"], model_max_length=self.max_length)
+        if config["transformer_type"] in ["gpt2"]:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
 
     def __call__(self, data):
         if self.transform is not None:
@@ -45,6 +47,8 @@ class TextTransformerSentFeaturizer(TextFeaturizer):
         self.max_length = config["max_length"]
         self.min_sentence_length = config["min_sentence_length"]
         self.tokenizer = name2tokenizer[config["transformer_type"]].from_pretrained(config["model_name_or_path"], model_max_length=self.max_length)
+        if config["transformer_type"] in ["gpt2"]:
+            self.tokenizer.pad_token = self.tokenizer.eos_token        
 
     def __call__(self, data):
         if self.transform is not None:
@@ -63,6 +67,8 @@ class TextTransformerEncFeaturizer(TextFeaturizer):
 
         self.max_length = config["max_length"]
         self.tokenizer = name2tokenizer[config["transformer_type"]].from_pretrained(config["model_name_or_path"], model_max_length=self.max_length)
+        if config["transformer_type"] in ["gpt2"]:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
         self.encoder = name2model[config["transformer_type"]].from_pretrained(config["model_name_or_path"])
         self.encoder = self.encoder.to(self.device)
         
