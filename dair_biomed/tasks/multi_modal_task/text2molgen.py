@@ -104,7 +104,7 @@ def add_z_optimize_arguments(parser):
     parser.add_argument("--lambd", type=float, default=1.0)
     parser.add_argument("--evaluate", action="store_true")
     parser.add_argument("--save_fig", action="store_true")
-    parser.add_argument("--save_path", type=str, default="../save/molgen/")
+    parser.add_argument("--save_path", type=str, default="../tmps/molgen/")
 
 if __name__ == "__main__":
     logging.basicConfig(

@@ -13,13 +13,12 @@ from tqdm import tqdm
 import torch
 from torch.autograd import Variable
 from torch.utils.data import DataLoader
-from torch.optim import Optimizer
-from torch.optim.optimizer import required
-from torch.nn.utils import clip_grad_norm_
 
 from utils import EarlyStopping, AverageMeter, DrugCollator, ToDevice, recall_at_k
+from utils.optimizers import BertAdam
 from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
-from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT, DrugDeepEIK
+from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT
+from models.mtr_model import MTRModel
 
 SUPPORTED_MTR_MODEL = {
     "SciBERT": DrugBERT,
@@ -27,148 +26,8 @@ SUPPORTED_MTR_MODEL = {
     "KV-PLM*": KVPLM,
     "MoMu": MoMu, 
     "MolALBEF": MolALBEF,
-    "DeepEIK": DrugDeepEIK
+    "combined": MTRModel
 }
-
-def warmup_cosine(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 0.5 * (1.0 + torch.cos(math.pi * x))
-
-def warmup_constant(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return 1.0
-
-def warmup_linear(x, warmup=0.002):
-    if x < warmup:
-        return x/warmup
-    return max((x - 1. )/ (warmup - 1.), 0.)
-    
-def warmup_poly(x, warmup=0.002, degree=0.5):
-    if x < warmup:
-        return x/warmup
-    return (1.0 - x)**degree
-
-
-SCHEDULES = {
-    'warmup_cosine':warmup_cosine,
-    'warmup_constant':warmup_constant,
-    'warmup_linear':warmup_linear,
-    'warmup_poly':warmup_poly,
-}
-
-class BertAdam(Optimizer):
-    """Implements BERT version of Adam algorithm with weight decay fix.
-    Params:
-        lr: learning rate
-        warmup: portion of t_total for the warmup, -1  means no warmup. Default: -1
-        t_total: total number of training steps for the learning
-            rate schedule, -1  means constant learning rate. Default: -1
-        schedule: schedule to use for the warmup (see above). Default: 'warmup_linear'
-        b1: Adams b1. Default: 0.9
-        b2: Adams b2. Default: 0.999
-        e: Adams epsilon. Default: 1e-6
-        weight_decay: Weight decay. Default: 0.01
-        max_grad_norm: Maximum norm for the gradients (-1 means no clipping). Default: 1.0
-    """
-    def __init__(self, params, lr=required, warmup=-1, t_total=-1, schedule='warmup_linear',
-                 b1=0.9, b2=0.999, e=1e-6, weight_decay=0.01,
-                 max_grad_norm=1.0):
-        if lr is not required and lr < 0.0:
-            raise ValueError("Invalid learning rate: {} - should be >= 0.0".format(lr))
-        if schedule not in SCHEDULES:
-            raise ValueError("Invalid schedule parameter: {}".format(schedule))
-        if not 0.0 <= warmup < 1.0 and not warmup == -1:
-            raise ValueError("Invalid warmup: {} - should be in [0.0, 1.0[ or -1".format(warmup))
-        if not 0.0 <= b1 < 1.0:
-            raise ValueError("Invalid b1 parameter: {} - should be in [0.0, 1.0[".format(b1))
-        if not 0.0 <= b2 < 1.0:
-            raise ValueError("Invalid b2 parameter: {} - should be in [0.0, 1.0[".format(b2))
-        if not e >= 0.0:
-            raise ValueError("Invalid epsilon value: {} - should be >= 0.0".format(e))
-        defaults = dict(lr=lr, schedule=schedule, warmup=warmup, t_total=t_total,
-                        b1=b1, b2=b2, e=e, weight_decay=weight_decay,
-                        max_grad_norm=max_grad_norm)
-        super(BertAdam, self).__init__(params, defaults)
-
-    def get_lr(self):
-        lr = []
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                if len(state) == 0:
-                    return [0]
-                if group['t_total'] != -1:
-                    schedule_fct = SCHEDULES[group['schedule']]
-                    lr_scheduled = group['lr'] * schedule_fct(state['step']/group['t_total'], group['warmup'])
-                else:
-                    lr_scheduled = group['lr']
-                lr.append(lr_scheduled)
-        return lr
-
-    def step(self, closure=None):
-        """Performs a single optimization step.
-        Arguments:
-            closure (callable, optional): A closure that reevaluates the model
-                and returns the loss.
-        """
-        loss = None
-        if closure is not None:
-            loss = closure()
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                grad = p.grad.data
-                if grad.is_sparse:
-                    raise RuntimeError('Adam does not support sparse gradients, please consider SparseAdam instead')
-
-                state = self.state[p]
-
-                # State initialization
-                if len(state) == 0:
-                    state['step'] = 0
-                    # Exponential moving average of gradient values
-                    state['next_m'] = torch.zeros_like(p.data)
-                    # Exponential moving average of squared gradient values
-                    state['next_v'] = torch.zeros_like(p.data)
-
-                next_m, next_v = state['next_m'], state['next_v']
-                beta1, beta2 = group['b1'], group['b2']
-
-                # Add grad clipping
-                if group['max_grad_norm'] > 0:
-                    clip_grad_norm_(p, group['max_grad_norm'])
-
-                # Decay the first and second moment running average coefficient
-                # In-place operations to update the averages at the same time
-                next_m.mul_(beta1).add_(1 - beta1, grad)
-                next_v.mul_(beta2).addcmul_(1 - beta2, grad, grad)
-                update = next_m / (next_v.sqrt() + group['e'])
-
-                # Just adding the square of the weights to the loss function is *not*
-                # the correct way of using L2 regularization/weight decay with Adam,
-                # since that will interact with the m and v parameters in strange ways.
-                #
-                # Instead we want to decay the weights in a manner that doesn't interact
-                # with the m/v parameters. This is equivalent to adding the square
-                # of the weights to the loss with plain (non-momentum) SGD.
-                if group['weight_decay'] > 0.0:
-                    update += group['weight_decay'] * p.data
-
-                if group['t_total'] != -1:
-                    schedule_fct = SCHEDULES[group['schedule']]
-                    lr_scheduled = group['lr'] * schedule_fct(state['step']/group['t_total'], group['warmup'])
-                else:
-                    lr_scheduled = group['lr']
-
-                update_with_lr = lr_scheduled * update
-                p.data.add_(-update_with_lr)
-
-                state['step'] += 1
-
-        return loss
 
 def contrastive_loss(logits_des, logits_smi, margin, device):
     scores = torch.cosine_similarity(logits_smi.unsqueeze(1).expand(logits_smi.shape[0], logits_smi.shape[0], logits_smi.shape[1]), logits_des.unsqueeze(0).expand(logits_des.shape[0], logits_des.shape[0], logits_des.shape[1]), dim=-1)
@@ -266,7 +125,7 @@ def rerank(dataset, model, index_structure, index_text, score, alpha, collator, 
     else:
         return torch.LongTensor([index_text[i] for i in new_idx.detach().cpu().tolist()])
 
-def val_mtr(val_dataset, model, collator, args, apply_rerank=False):
+def val_mtr(val_dataset, model, collator, args):
     val_loader = DataLoader(val_dataset, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
     model.eval()
     drug_rep_total, text_rep_total = [], []
@@ -293,41 +152,70 @@ def val_mtr(val_dataset, model, collator, args, apply_rerank=False):
         drug_rep = torch.cat(drug_rep_total, dim=0)
         text_rep = torch.cat(text_rep_total, dim=0)
         score = torch.zeros(n_samples, n_samples)
-        mrr_d2t, mrr_t2d = 0, 0
-        rec_d2t, rec_t2d = [0, 0, 0], [0, 0, 0]
+        mrr_m2t, mrr_t2m = 0, 0
+        rec_m2t, rec_t2m = [0, 0, 0], [0, 0, 0]
+        logger.info("Calculating cosine similarity...")
         for i in tqdm(range(n_samples)):
             score[i] = torch.cosine_similarity(drug_rep[i], text_rep)
+        if hasattr(model, "predict_similarity_score") and args.rerank:
+            logger.info("Reranking...")
         for i in tqdm(range(n_samples)):
             _, idx = torch.sort(score[i, :], descending=True)
             idx = idx.detach().cpu()
-            if hasattr(model, "predict_similarity_score") and apply_rerank:
+            if hasattr(model, "predict_similarity_score") and args.rerank:
                 idx = torch.cat((
-                    rerank(val_dataset, model, [i], idx[:args.rerank_num].tolist(), score[i, idx[:args.rerank_num]], 0.8, collator, args.device),
+                    rerank(val_dataset, model, [i], idx[:args.rerank_num].tolist(), score[i, idx[:args.rerank_num]], args.alpha_m2t, collator, args.device),
                     idx[args.rerank_num:]
                 ), dim=0)
             for j, k in enumerate([1, 5, 10]):
-                rec_d2t[j] += recall_at_k(idx, i, k)
-            mrr_d2t += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
+                rec_m2t[j] += recall_at_k(idx, i, k)
+            mrr_m2t += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
 
             _, idx = torch.sort(score[:, i], descending=True)
             idx = idx.detach().cpu()
-            if hasattr(model, "predict_similarity_score") and apply_rerank:
+            if hasattr(model, "predict_similarity_score") and args.rerank:
                 idx = torch.cat((
-                    rerank(val_dataset, model, idx[:args.rerank_num].tolist(), [i], score[idx[:args.rerank_num], i], 0.8, collator, args.device),
+                    rerank(val_dataset, model, idx[:args.rerank_num].tolist(), [i], score[idx[:args.rerank_num], i], args.alpha_t2m, collator, args.device),
                     idx[args.rerank_num:]
                 ), dim=0)
             for j, k in enumerate([1, 5, 10]):
-                rec_t2d[j] += recall_at_k(idx, i, k)
-            mrr_t2d += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
+                rec_t2m[j] += recall_at_k(idx, i, k)
+            mrr_t2m += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
 
         result = {
-            "mrr_d2t": mrr_d2t / n_samples,
-            "mrr_t2d": mrr_t2d / n_samples,
+            "mrr_d2t": mrr_m2t / n_samples,
+            "mrr_t2d": mrr_t2m / n_samples,
         }
         for idx, k in enumerate([1, 5, 10]):
-            result["rec@%d_d2t" % k] = rec_d2t[idx] / n_samples
-            result["rec@%d_t2d" % k] = rec_t2d[idx] / n_samples
+            result["rec@%d_d2t" % k] = rec_m2t[idx] / n_samples
+            result["rec@%d_t2d" % k] = rec_t2m[idx] / n_samples
         return result
+
+def main(args, config):
+    dataset = SUPPORTED_MTR_DATASETS[args.dataset](args.dataset_path, config["data"], args.dataset_mode, args.filter, args.filter_path)
+    train_dataset = dataset.index_select(dataset.train_index)
+    val_dataset = dataset.index_select(dataset.val_index)
+    test_dataset = dataset.index_select(dataset.test_index)
+    val_dataset.set_test()
+    test_dataset.set_test()
+    collator = DrugCollator(config["data"]["drug"])
+
+    model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
+    if args.init_checkpoint != "":
+        ckpt = torch.load(args.init_checkpoint, map_location="cpu")
+        if args.param_key != "":
+            ckpt = ckpt[args.param_key]
+        model.load_state_dict(ckpt)
+    model = model.to(args.device)
+    
+    if args.mode == "zero_shot":
+        model.eval()
+        result = val_mtr(test_dataset, model, collator, args)
+        print(result)
+    elif args.mode == "train":
+        train_mtr(train_dataset, val_dataset, model, collator, args)
+        result = val_mtr(test_dataset, model, collator, args)
+        print(result)
 
 def add_arguments(parser):
     parser.add_argument("--device", type=str, default="cuda:0")
@@ -352,8 +240,13 @@ def add_arguments(parser):
     parser.add_argument("--log_every", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--margin", type=float, default=0.2)
-    parser.add_argument("--rerank", action="store_true")
+    rerank_group = parser.add_mutually_exclusive_group(required=False)
+    rerank_group.add_argument("--rerank", action="store_true")
+    rerank_group.add_argument("--no_rerank", action="store_false")
+    parser.set_defaults(rerank=False)
     parser.add_argument("--rerank_num", type=int, default=32)
+    parser.add_argument("--alpha_m2t", type=float, default=0.8)
+    parser.add_argument("--alpha_t2m", type=float, default=0.8)
 
 if __name__ == "__main__":
     logging.basicConfig(
@@ -370,27 +263,4 @@ if __name__ == "__main__":
         config["data"]["drug"]["featurizer"]["text"]["name"] = "BertSentenceTokenizer"
         config["data"]["drug"]["featurizer"]["text"]["min_sentence_length"] = 5
 
-    dataset = SUPPORTED_MTR_DATASETS[args.dataset](args.dataset_path, config["data"], args.dataset_mode, args.filter, args.filter_path)
-    train_dataset = dataset.index_select(dataset.train_index)
-    val_dataset = dataset.index_select(dataset.val_index)
-    test_dataset = dataset.index_select(dataset.test_index)
-    val_dataset.set_test()
-    test_dataset.set_test()
-    collator = DrugCollator(config["data"]["drug"])
-
-    model = SUPPORTED_MTR_MODEL[config["model"]](config["network"])
-    if args.init_checkpoint != "None":
-        ckpt = torch.load(args.init_checkpoint, map_location="cpu")
-        if args.param_key != "None":
-            ckpt = ckpt[args.param_key]
-        model.load_state_dict(ckpt)
-    model = model.to(args.device)
-    
-    if args.mode == "zero_shot":
-        model.eval()
-        result = val_mtr(test_dataset, model, collator, args, apply_rerank=args.rerank)
-        print(result)
-    elif args.mode == "train":
-        train_mtr(train_dataset, val_dataset, model, collator, args)
-        result = val_mtr(test_dataset, model, collator, args, apply_rerank=args.rerank)
-        print(result)
+    main(args, config)

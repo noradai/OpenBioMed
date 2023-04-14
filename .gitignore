@@ -148,3 +148,12 @@ cython_debug/
 /assets
 /save
 /tmps
+.datasets/
+
+
+#files
+*.csv
+*.pt
+*.txt
+dair-biomed/
+origin-data/

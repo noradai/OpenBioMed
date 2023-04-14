@@ -9,7 +9,8 @@ class KGFeaturizer(BaseFeaturizer, ABC):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.kg = SUPPORTED_KG[self.config["kg_name"]](self.config["kg_path"])
+        # TODO：self.kg is no use
+        # self.kg = SUPPORTED_KG[self.config["kg_name"]](self.config["kg_path"])
         self.transform = None
 
     def set_transform(self, transform):
@@ -19,12 +20,23 @@ class KGFeaturizer(BaseFeaturizer, ABC):
     def __call__(self, data):
         raise NotImplementedError
 
+
 class KGIDFeaturizer(KGFeaturizer):
     def __init__(self, config):
         super().__init__(config)
+        self.embed_dim = config["embed_dim"]
+        # TODO: hard code
+        self.max_index = 49111
 
+    # data: SMILES
     def __call__(self, data):
-        return self.transform(data)
+        if self.transform is not None:
+            index = self.transform[data]
+            if index == -1 or index is None:
+                index = self.max_index
+            return index
+        else:
+            return None
 
 # ugly, redesign later
 class KGEFeaturizer(KGFeaturizer):
@@ -41,7 +53,8 @@ class KGEFeaturizer(KGFeaturizer):
         else:
             return torch.FloatTensor(self.kge[data])
 
+
 SUPPORTED_KG_FEATURIZER = {
-    "id": KGIDFeaturizer, 
+    "id": KGIDFeaturizer,
     "KGE": KGEFeaturizer
 }

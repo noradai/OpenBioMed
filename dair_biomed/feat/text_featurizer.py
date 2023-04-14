@@ -1,16 +1,19 @@
 from abc import ABC, abstractmethod
-from transformers import BertModel, BertTokenizer, T5Model, T5Tokenizer
+from transformers import BertModel, BertTokenizer, T5Model, T5Tokenizer, GPT2Model, GPT2Tokenizer
 
 from feat.base_featurizer import BaseFeaturizer
 from utils import ToDevice
 
+# Warning: it seems that the results of AutoTokenizer and specified tokenizer is different
 name2tokenizer = {
     "bert": BertTokenizer,
-    "t5": T5Tokenizer
+    "t5": T5Tokenizer,
+    "gpt2": GPT2Tokenizer
 }
 name2model = {
     "bert": BertModel,
-    "t5": T5Model
+    "t5": T5Model,
+    "gpt2": GPT2Model
 }
 
 class TextFeaturizer(BaseFeaturizer, ABC):

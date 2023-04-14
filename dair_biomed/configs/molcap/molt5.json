@@ -5,27 +5,23 @@
             "modality": ["structure", "text"],
             "featurizer": {
                 "structure": {
-                    "name": "MultiScale",
-                    "scales": ["SMILES"],
-                    "SMILES": {
-                        "name": "transformer",
-                        "transformer_type": "t5",
-                        "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base",
-                        "max_length": 512
-                    }
+                    "name": "transformer",
+                    "transformer_type": "t5",
+                    "model_name_or_path": "../ckpts/text_ckpts/MolT5-small-smiles2caption",
+                    "max_length": 512
                 },
                 "text": {
                     "name": "TransformerTokenizer",
                     "transformer_type": "t5",
                     "max_length": 512,
-                    "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base"
+                    "model_name_or_path": "../ckpts/text_ckpts/MolT5-small-smiles2caption"
                 }
             }
         }
     },
     "network": {
         "text": {
-            "model_name_or_path": "../ckpts/bert_ckpts/MolT5/MolT5-base",
+            "model_name_or_path": "../ckpts/text_ckpts/MolT5-small-smiles2caption",
             "transformer_type": "t5",
             "stop_grad": true
         }

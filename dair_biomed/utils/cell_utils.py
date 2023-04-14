@@ -8,7 +8,7 @@ def load_hugo2ncbi():
     ncbi2hugo = {}
     hugo2ncbi = {}
     try:
-        with open("../datasets/drp/enterez_NCBI_to_hugo_gene_symbol_march_2019.txt", "r") as f:
+        with open("../assets/drp/enterez_NCBI_to_hugo_gene_symbol_march_2019.txt", "r") as f:
             for line in f.readlines():
                 line = line.strip("\n").split("\t")
                 if len(line) > 1:
@@ -31,7 +31,7 @@ class TGSAGeneSelector(GeneSelector):
         super(TGSAGeneSelector, self).__init__()
         self.ncbi2hugo, self.hugo2ncbi = load_hugo2ncbi()
         self.selected_index_hugo = []
-        with open("../datasets/drp/selected_genes.txt", "r") as f:
+        with open("../assets/drp/selected_genes.txt", "r") as f:
             line = f.readline().strip("\n").split(",")
             for index in line:
                 self.selected_index_hugo.append(index.lstrip('(').rstrip(')'))

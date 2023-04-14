@@ -57,6 +57,8 @@ class MoMu(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(self.bert_hidden_dim, self.projection_dim)
         )
+        self.output_dim = self.projection_dim
+        # self.output_dim = self.gin_hidden_dim
 
     def forward(self, features_graph, features_text):
         batch_size = features_graph.size(0)

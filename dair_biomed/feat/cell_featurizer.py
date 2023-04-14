@@ -13,17 +13,17 @@ from feat.base_featurizer import BaseFeaturizer
 from utils.kg_utils import STRING
 
 class CellTGSAFeaturizer(BaseFeaturizer):
-    def __init__(self, name, edge_threshold):
+    def __init__(self, config):
         super(CellTGSAFeaturizer, self).__init__()
-        save_path = "../datasets/drp/gene_graph.pkl"
+        save_path = "../assets/drp/gene_graph.pkl"
         if not os.path.exists(save_path):
             logger.info("Generating gene graph...")
             self.selected_index_hugo = []
-            with open("../datasets/drp/selected_genes.txt", "r") as f:
+            with open("../assets/drp/selected_genes.txt", "r") as f:
                 line = f.readline().strip("\n").split(",")
                 for index in line:
                     self.selected_index_hugo.append(index.lstrip('(').rstrip(')'))
-            self.ppi_graph = STRING("../datasets/kg/STRING", edge_threshold).node_subgraph(self.selected_index_hugo)
+            self.ppi_graph = STRING("../assets/kg/STRING", config["edge_threshold"]).node_subgraph(self.selected_index_hugo)
             self.predefined_cluster = self._gen_predefined_cluster()
             pickle.dump({
                 "graph": self.ppi_graph,
