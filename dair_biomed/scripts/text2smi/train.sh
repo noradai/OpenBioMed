@@ -1,7 +1,7 @@
 #!/bin/bash
 MODE="train"
 MODEL="molalbef"
-DEVICE="cuda:1"
+DEVICE="cuda:0"
 EPOCHS=200
 SAVE_FILE=../assets/text2smi/${MODEL}-smi.txt
 
@@ -10,7 +10,7 @@ python tasks/multi_modal_task/text2smigen.py \
 --config_path ./configs/text2smi/${MODEL}-molt5.json \
 --dataset chebi-20 \
 --dataset_path ../datasets/molcap/chebi-20 \
---output_path ../ckpts/finetune_ckpts/text2smi/
+--output_path ../ckpts/finetune_ckpts/text2smi/ \
 --smi_save_path ${SAVE_FILE} \
 --mode ${MODE} \
 --epochs ${EPOCHS} \
@@ -19,7 +19,7 @@ python tasks/multi_modal_task/text2smigen.py \
 --logging_steps 300 \
 --patience 20
 
-EVAL_TEXT2MOL=false
+EVAL_TEXT2MOL=true
 
 if $EVAL_TEXT2MOL
 then

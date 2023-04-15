@@ -151,9 +151,9 @@ def add_arguments(parser):
     parser.add_argument("--weight_decay", type=float, default=0)
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--logging_steps", type=int, default=300)
-    parser.add_argument("--text2mol_bert_path", type=str, default="")
-    parser.add_argument("--text2mol_data_path", type=str, default="")
-    parser.add_argument("--text2mol_ckpt_path", type=str, default="")
+    parser.add_argument("--text2mol_bert_path", type=str, default="../ckpts/text_ckpts/scibert_scivocab_uncased/")
+    parser.add_argument("--text2mol_data_path", type=str, default="../assets/molcap/text2mol_data/")
+    parser.add_argument("--text2mol_ckpt_path", type=str, default="../ckpts/fusion_ckpts/text2mol/test_outputfinal_weights.320.pt")
 
 if __name__ == "__main__":
     logging.basicConfig(

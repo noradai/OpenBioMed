@@ -18,7 +18,7 @@ class BioMedGPT(nn.Module):
         self.text_encoder = BaseTransformers(config["text"])
         for param in self.text_encoder.parameters():
             param.requires_grad = False
-        for param in self.text_encoder.main_model.h[-2:].parameters():
+        for param in self.text_encoder.main_model.h[-16:].parameters():
             param.requires_grad = True
 
         self.graph_proj_head = nn.Linear(self.graph_encoder.output_dim, config["projection_dim"])
