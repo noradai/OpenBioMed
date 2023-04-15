@@ -1,6 +1,6 @@
 #!/bin/bash
 MODE="train"
-TASK_MODE="paragraph"
+TASK_MODE="sentence"
 MODEL="biomedgpt"
 DEVICE="cuda:0"
 EPOCHS=100
@@ -19,12 +19,12 @@ then
     RERANK="rerank"
 elif [ $MODEL = "momu" ]; 
 then
-    CKPT="../ckpts/fusion_ckpts/momu/MoMu-K.ckpt"
+    CKPT="../ckpts/fusion_ckpts/momu/MoMu-S.ckpt"
     PARAM_KEY="state_dict"
     RERANK="no_rerank"
 elif [ $MODEL = "biomedgpt" ];
 then
-    CKPT="../ckpts/fusion_ckpts/biomedgpt/epoch179.pth"
+    CKPT="../ckpts/fusion_ckpts/biomedgpt/epoch199.pth"
     PARAM_KEY="None"
     RERANK="no_rerank"
     BATCH_SIZE=32

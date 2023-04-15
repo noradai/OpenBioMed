@@ -17,6 +17,6 @@ python tasks/multi_modal_task/molcap.py \
 --batch_size 16 \
 --logging_steps 300 \
 --patience 200 \
---text2mol_bert_path ../ckpts/bert_ckpts/scibert_scivocab_uncased/ \
+--text2mol_bert_path ../ckpts/text_ckpts/scibert_scivocab_uncased/ \
 --text2mol_data_path ../assets/molcap/text2mol_data/ \
 --text2mol_ckpt_path ../ckpts/fusion_ckpts/text2mol/test_outputfinal_weights.320.pt
