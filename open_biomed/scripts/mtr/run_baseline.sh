@@ -2,7 +2,7 @@
 MODE="train"
 TASK_MODE="paragraph"
 DRUG_MODEL="graphmvp"
-TEXT_MODEL="kvplm"
+TEXT_MODEL="scibert"
 DEVICE="cuda:0"
 EPOCHS=100
 

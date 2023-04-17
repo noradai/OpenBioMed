@@ -65,10 +65,11 @@ def val_molcap(val_loader, model, device):
     val_loss = 0
 
     logger.info("Validating...")
-    for mol in val_loader:
-        mol = ToDevice(mol, device)
-        loss = model(mol)
-        val_loss += loss.detach().cpu().item()
+    with torch.no_grad():
+        for mol in val_loader:
+            mol = ToDevice(mol, device)
+            loss = model(mol)
+            val_loss += loss.detach().cpu().item()
     logger.info("validation loss %.4lf" % (val_loss / len(val_loader)))
     return val_loss / len(val_loader)
 
@@ -78,15 +79,16 @@ def test_molcap(test_dataset, test_loader, model, args, device):
     gts = test_dataset.texts
 
     logger.info("Testing...")
-    for i, mol in enumerate(tqdm(test_loader)):
-        mol = ToDevice(mol, device)
-        output = model.decode(mol, num_beams=5, max_length=512)
-        outputs += output
-        if i <= 3:
-            for j in range(5):
-                logger.info("Generated: %s" % outputs[-j])
-                logger.info("Ground truth: %s" % gts[len(outputs) - j])
-                logger.info("------------------------------------------------------")
+    with torch.no_grad():
+        for i, mol in enumerate(tqdm(test_loader)):
+            mol = ToDevice(mol, device)
+            output = model.decode(mol, num_beams=5, max_length=512)
+            outputs += output
+            if i <= 3:
+                for j in range(5):
+                    logger.info("Generated: %s" % outputs[-j])
+                    logger.info("Ground truth: %s" % gts[len(outputs) - j])
+                    logger.info("------------------------------------------------------")
 
     tokenizer = BertTokenizerFast.from_pretrained(args.text2mol_bert_path)
     output_tokens = []

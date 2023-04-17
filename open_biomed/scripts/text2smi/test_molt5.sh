@@ -1,8 +1,8 @@
 #!/bin/bash
 MODE="test"
-DEVICE="cuda:1"
+DEVICE="cuda:0"
 
-GEN_SMILES=false
+GEN_SMILES=true
 SAVE_FILE=../assets/text2smi/molt5-smi.txt
 
 if $GEN_SMILES
@@ -10,6 +10,7 @@ then
     python tasks/multi_modal_task/text2smigen.py \
     --device ${DEVICE} \
     --config_path ./configs/text2smi/molt5.json \
+    --output_path None \
     --dataset chebi-20 \
     --dataset_path ../datasets/molcap/chebi-20 \
     --smi_save_path ${SAVE_FILE} \

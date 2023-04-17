@@ -639,7 +639,7 @@ class DrugGraphFeaturizerV2(BaseFeaturizer):
     'possible_number_radical_e_list': [0, 1, 2, 3, 4, 'misc'],
     'possible_is_aromatic_list':      [False, True],
     'possible_is_in_ring_list':       [False, True],
-    'possible_bond_type_list':                 [
+    'possible_bond_type_list':        [
         Chem.rdchem.BondType.SINGLE,
         Chem.rdchem.BondType.DOUBLE,
         Chem.rdchem.BondType.TRIPLE,
@@ -778,7 +778,7 @@ SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER = {
     "TGSA": DrugTGSAFeaturizer,
     "ogb": DrugGraphFeaturizer,
     "MGNN": DrugMGNNFeaturizer,
-    "BaseGNN": DrugGraphFeaturizerV2,
+    "BaseGNN": DrugGraphFeaturizer,
 }
 
 SUPPORTED_SINGLE_MODAL_DRUG_FEATURIZER = copy.deepcopy(SUPPORTED_SINGLE_SCALE_DRUG_FEATURIZER)

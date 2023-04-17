@@ -141,7 +141,6 @@ def test_text2mol(args):
     logger.info("Calculating Text2Mol Metric...")
     text2mol_scores = []
     bad_smiles = 0
-    good_smiles = 0
     with open(args.smi_save_path, "r") as f:
         for i, line in enumerate(f.readlines()):
             if i == 0:

@@ -14,6 +14,10 @@ class BaseTransformers(nn.Module):
             if "init_checkpoint" in config:
                 ckpt = torch.load(config["init_checkpoint"])
                 self.main_model.load_state_dict(ckpt)
+        if "use_num_layers" in config:
+            self.use_num_layers = config["use_num_layers"]
+        else:
+            self.use_num_layers = -1
         self.dropout = nn.Dropout(config["dropout"])
         self.pooler = config["pooler"]
         self.output_dim = transformer_config.hidden_size
@@ -27,3 +31,12 @@ class BaseTransformers(nn.Module):
         elif self.pooler == 'cls':
             result = result['last_hidden_state'][:, 0, :]
         return self.dropout(result)
+
+    def encode_text(self, text, return_cls=False, proj=False):
+        if self.use_num_layers == -1:
+            result = self.main_model(**text)
+            return result['last_hidden_state']
+        else:
+            text["output_hidden_states"] = True
+            result = self.main_model(**text)
+            return result['hidden_states'][self.use_num_layers]

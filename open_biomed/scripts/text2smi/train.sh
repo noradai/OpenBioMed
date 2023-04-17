@@ -1,7 +1,7 @@
 #!/bin/bash
 MODE="train"
 MODEL="molalbef"
-DEVICE="cuda:0"
+DEVICE="cuda:2"
 EPOCHS=200
 SAVE_FILE=../assets/text2smi/${MODEL}-smi.txt
 
@@ -15,7 +15,7 @@ python tasks/multi_modal_task/text2smigen.py \
 --mode ${MODE} \
 --epochs ${EPOCHS} \
 --num_workers 1 \
---batch_size 32 \
+--batch_size 14 \
 --logging_steps 300 \
 --patience 20
 
