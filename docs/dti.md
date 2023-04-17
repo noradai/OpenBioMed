@@ -1,5 +1,5 @@
 ## Drug-Target Interaction Prediction
-Drug-target interaction prediction aims to predict the binding relationships between drugs and target proteins, which is a significant task in drug discovery.  
+Drug-target interaction prediction aims to predict the binding relationships between drugs and target proteins, which is a significant task in AI drug discovery.  
 
 #### Feature
 
@@ -43,7 +43,7 @@ You can run scripts using bash under `scripts/dti/`:
 
 ```bash
 scripts/dti
-├── train_baseline.sh							# running DeepDTA or MGraphDTA on Yamanishi08's and BMKG-DTI under 4 settings
+├── train_baseline.sh             # running DeepDTA or MGraphDTA on Yamanishi08's and BMKG-DTI under 4 settings
 ├── train_baseline_regression.sh  # running DeepDTA or MGraphDTA on Davis or KIBA
 ├── train_deepeik.sh              # running DeepEIK on Yamanishi08's and BMKG-DTI under 4 settings
 └── train_deepeik_regression.sh   # running DeepEIK on Davis or KIBA
@@ -53,23 +53,23 @@ You can also modify the scripts or directly use the following command:
 
 ```bash
 python tasks/mol_task/dti.py \
-[--device DEVICE] \									  # gpu device id
-[--mode MODE] \											  # training mode, kfold: 5-fold validation, train: train-test
-[--config_path CONFIG_PATH] \				  # configuration file, see configs/dti/ for more details
-[--dataset DATASET] \								  # dataset name, select from [yamanishi08, bmkg-dti, davis, kiba]
-[--dataset_path DATASET_PATH] \       # path to the dataset
-[--split_strategy SPLIT_STRATEGY] \   # split strategy, select from [warm, cold-drug, cold-protein, cold-cluster]
-[--init_checkpoint INIT_CHECKPOINT] \ # checkpoint path used for efficient validation
-[--param_key PARAM_KEY] \							# key of the checkpoint dict that contains model parameters
-[--output_path OUTPUT_PATH] \         # save checkpoint path used for training
-[--num_workers NUM_WORKERS] \         # number of workers when loading data
-[--epochs EPOCHS] \                   # number of training epochs
-[--patience PATIENCE] \               # number of tolerant epochs for early-stopping
-[--weight_decay WEIGHT_DECAY] \       # weight decay, default is 1e-5
-[--lr LR] \                           # learning rate, default is 1e-3
-[--batch_size BATCH_SIZE] \           # batch size, default is 128
-[--gradient_accumulation_steps GRADIENT_ACCUMULATION_STEPS] \ # steps for gradient accumulation
-[--logging_steps LOGGING_STEPS] \     # steps for printing training information
-[--seed SEED]                         # random seed
+--device DEVICE \                   # gpu device id
+--mode MODE \                       # training mode, kfold: 5-fold validation, train: train-test
+--config_path CONFIG_PATH \         # configuration file, see configs/dti/ for more details
+--dataset DATASET \                 # dataset name, select from [yamanishi08, bmkg-dti, davis, kiba]
+--dataset_path DATASET_PATH \       # path to the dataset
+--split_strategy SPLIT_STRATEGY \   # split strategy, select from [warm, cold-drug, cold-protein, cold-cluster]
+--init_checkpoint INIT_CHECKPOINT \ # checkpoint path used for efficient validation
+--param_key PARAM_KEY \             # key of the checkpoint dict that contains model parameters
+--output_path OUTPUT_PATH \         # save checkpoint path used for training
+--num_workers NUM_WORKERS \         # number of workers when loading data
+--epochs EPOCHS \                   # number of training epochs
+--patience PATIENCE \               # number of tolerant epochs for early-stopping
+--weight_decay WEIGHT_DECAY \       # weight decay, default is 1e-5
+--lr LR \                           # learning rate, default is 1e-3
+--batch_size BATCH_SIZE \           # batch size, default is 128
+--gradient_accumulation_steps GRADIENT_ACCUMULATION_STEPS \ # steps for gradient accumulation
+--logging_steps LOGGING_STEPS \     # steps for printing training information
+--seed SEED                         # random seed
 ```
 
