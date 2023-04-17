@@ -43,7 +43,7 @@ Here we provide a quick example of training DeepDTA for drug-target interaction 
 
 #### Step1: Data Preparation
 
-Install the Davis dataset [here](https://drive.google.com/drive/folders/1pz4QZEmcZrBU5JAJliyMNvMrBFeXN4SN?usp=sharing) and and run the following:
+Install the Davis dataset [here](https://drive.google.com/drive/folders/1pz4QZEmcZrBU5JAJliyMNvMrBFeXN4SN?usp=sharing) and run the following:
 
 ```
 mkdir datasets

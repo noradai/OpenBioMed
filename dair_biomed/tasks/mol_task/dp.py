@@ -31,6 +31,7 @@ def add_arguments(parser):
                         default='../datasets/dp/MoleculeNet/')
     parser.add_argument("--dataset_name", type=str, default='BBBP')
     parser.add_argument("--init_checkpoint", type=str, default="")
+    parser.add_argument("--param_key", type=str, default="None")
     parser.add_argument("--output_path", type=str,
                         default="../ckpts/finetune_ckpts/dp/finetune.pth")
     parser.add_argument("--num_workers", type=int, default=4)
