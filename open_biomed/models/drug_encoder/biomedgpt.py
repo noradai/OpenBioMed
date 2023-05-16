@@ -42,11 +42,15 @@ class BioMedGPT(nn.Module):
 
         return logits_per_graph, logits_per_text, loss
 
-    def encode_structure(self, structure, proj=True):
-        h, _ = self.graph_encoder(structure)
+    def encode_structure(self, structure, proj=True, return_node_feats=False):
+        h, node_feats = self.graph_encoder(structure)
         if proj:
             h = self.graph_proj_head(h)
-        return h
+            node_feats = self.graph_proj_head(node_feats)
+        if return_node_feats:
+            return h, node_feats
+        else:
+            return h
 
     def encode_structure_with_prob(self, structure, x, atomic_num_list, device):
         h, _ = self.graph_encoder(structure, x, atomic_num_list, device)

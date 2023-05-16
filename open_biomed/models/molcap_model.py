@@ -4,14 +4,15 @@ import torch.nn as nn
 from transformers.modeling_outputs import BaseModelOutput
 
 from models.drug_decoder.molt5 import MolT5
-from models.drug_encoder import MoMu, MolALBEF, GraphMVP
+from models.drug_encoder import MoMu, MolALBEF, GraphMVP, BioMedGPT
 
 from utils.mol_utils import convert_pyg_batch
 
 SUPPORTED_DRUG_ENCODER = {
     "GraphMVP": GraphMVP,
     "MoMu": MoMu,
-    "MolALBEF": MolALBEF
+    "MolALBEF": MolALBEF,
+    "BioMedGPT": BioMedGPT
 }
 
 class MolCapModel(nn.Module):

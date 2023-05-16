@@ -50,7 +50,7 @@ class MolALBEF(nn.Module):
 
         self.mtm_head = nn.Linear(bert_config.hidden_size, 2)
 
-    def forward(self, mol, text, kg=None, cal_loss=False):
+    def forward(self, mol, text, kg=None, cal_loss=False, output_attentions=False):
         mol_embeds, node_embeds = self.graph_encoder(mol)
         mol_feats = F.normalize(self.graph_proj_head(mol_embeds), dim=-1)
         all_node_feats = self.graph_linear(node_embeds)
@@ -58,6 +58,8 @@ class MolALBEF(nn.Module):
         batch_size = mol_feats.shape[0]
 
         node_feats, node_attention_mask = convert_pyg_batch(all_node_feats, mol.batch, self.max_n_nodes)
+        #node_feats = self.graph_linear(mol_embeds).unsqueeze(1)
+        #node_attention_mask = torch.ones(batch_size, 1).to(node_feats)
 
         text_outputs = self.text_encoder.bert(text["input_ids"], attention_mask=text["attention_mask"], mode='text', return_dict=True)
         seq_feats = text_outputs["last_hidden_state"]
@@ -65,7 +67,7 @@ class MolALBEF(nn.Module):
             neigh_feats = self.kg_encoder.predict(kg["neigh_indice"])
             neigh_feats = self.kg_linear(neigh_feats)
             node_feats = torch.cat((node_feats, neigh_feats), dim=1)
-            node_attn = torch.cat((node_attn, kg["neigh_attn"]), dim=1)
+            node_attention_mask = torch.cat((node_attention_mask, kg["neigh_attn"]), dim=1)
         
         output = self.text_encoder.bert(
             encoder_embeds=seq_feats,
@@ -73,7 +75,8 @@ class MolALBEF(nn.Module):
             encoder_hidden_states=node_feats,
             encoder_attention_mask=node_attention_mask,
             mode='fusion',
-            return_dict=True
+            return_dict=True,
+            output_attentions=output_attentions,
         )
         if cal_loss:
             perm =  []

@@ -16,6 +16,7 @@
     "pad_token_id": 0,
     "type_vocab_size": 2,
     "vocab_size": 31090,
+    "add_cross_attention": true,
     "fusion_layer": 6,
     "encoder_width": 768
   }

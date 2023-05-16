@@ -1,13 +1,16 @@
 #!/bin/bash
 MODE="train"
-TASK_MODE="paragraph"
+TASK_MODE="sentence"
 DRUG_MODEL="graphmvp"
 TEXT_MODEL="scibert"
-DEVICE="cuda:0"
+DEVICE="cuda:2"
 EPOCHS=100
 
 FILTER_FILE="../datasets/mtr/momu_pretrain/pair.txt"
 
+for SEED in {42..45..1}
+do
+echo "seed is "${SEED}
 python tasks/multi_modal_task/mtr.py \
 --device ${DEVICE} \
 --dataset PCdes \
@@ -21,4 +24,6 @@ python tasks/multi_modal_task/mtr.py \
 --mode ${MODE} \
 --patience 20 \
 --epochs ${EPOCHS} \
---no_rerank
+--no_rerank \
+--seed ${SEED}
+done

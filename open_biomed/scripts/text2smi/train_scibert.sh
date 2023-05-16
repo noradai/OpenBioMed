@@ -1,8 +1,8 @@
 #!/bin/bash
 MODE="train"
 MODEL="scibert"
-DEVICE="cuda:2"
-EPOCHS=200
+DEVICE="cuda:0"
+EPOCHS=100
 SAVE_FILE=../assets/text2smi/${MODEL}-smi.txt
 
 python tasks/multi_modal_task/text2smigen.py \

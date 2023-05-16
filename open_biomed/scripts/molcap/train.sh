@@ -1,8 +1,8 @@
 #!/bin/bash
-MODE="traintest"
+MODE="train"
 MODEL="graphmvp"
 DEVICE="cuda:1"
-EPOCHS=200
+EPOCHS=100
 
 mkdir ../ckpts/finetune_ckpts/molcap/${MODEL}
 
@@ -16,7 +16,7 @@ python tasks/multi_modal_task/molcap.py \
 --mode ${MODE} \
 --epochs ${EPOCHS} \
 --num_workers 1 \
---batch_size 12 \
+--batch_size 4 \
 --logging_steps 300 \
 --patience 200 \
 --text2mol_bert_path ../ckpts/text_ckpts/scibert_scivocab_uncased/ \

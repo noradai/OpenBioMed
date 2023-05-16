@@ -6,31 +6,21 @@ DEVICE="cuda:0"
 EPOCHS=100
 
 CKPT="None"
-PARAM_KEY="None"
+PARAM_KEY="model_state_dict"
 RERANK="no_rerank"
 
 FILTER_FILE="../datasets/mtr/momu_pretrain/pair.txt"
 
 if [ $MODEL = "molalbef" ]; 
 then
-    CKPT="../ckpts/fusion_ckpts/molalbef-ke-2/checkpoint_299.pth"
-    PARAM_KEY="model"
-    RERANK="rerank"
+    CKPT="../ckpts/finetune_ckpts/molalbef-paragraph-finetune.pth"
+    RERANK="no_rerank"
 elif [ $MODEL = "momu" ]; 
 then
-    CKPT="../ckpts/fusion_ckpts/momu/MoMu-S.ckpt"
-    PARAM_KEY="state_dict"
-    RERANK="no_rerank"
-elif [ $MODEL = "biomedgpt" ];
-then
-    CKPT="../ckpts/fusion_ckpts/biomedgpt/epoch199.pth"
-    PARAM_KEY="None"
+    CKPT="../ckpts/finetune_ckpts/momu-paragraph-finetune.pth"
     RERANK="no_rerank"
 fi
 
-#for SEED in {42..45..1}
-#do
-#echo "seed is "${SEED}
 python tasks/multi_modal_task/mtr.py \
 --device ${DEVICE} \
 --dataset PCdes \
@@ -48,6 +38,5 @@ python tasks/multi_modal_task/mtr.py \
 --epochs ${EPOCHS} \
 --${RERANK} \
 --rerank_num 32 \
---alpha_m2t 0.85 \
---alpha_t2m 0.9
-#done
+--alpha_m2t 0.9 \
+--alpha_t2m 0.8

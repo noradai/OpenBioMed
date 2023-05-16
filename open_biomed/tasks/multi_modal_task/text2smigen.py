@@ -65,10 +65,11 @@ def val_text2smi(val_loader, model, device):
     val_loss = 0
 
     logger.info("Validating...")
-    for mol in val_loader:
-        mol = ToDevice(mol, device)
-        loss = model(mol)
-        val_loss += loss.detach().cpu().item()
+    with torch.no_grad():
+        for mol in val_loader:
+            mol = ToDevice(mol, device)
+            loss = model(mol)
+            val_loss += loss.detach().cpu().item()
     logger.info("validation loss %.4lf" % (val_loss / len(val_loader)))
     return val_loss / len(val_loader)
 

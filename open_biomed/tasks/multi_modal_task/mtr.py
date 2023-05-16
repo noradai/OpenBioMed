@@ -103,7 +103,7 @@ def train_mtr(train_dataset, val_dataset, model, collator, args):
                 logger.info("Steps=%d Training Loss=%.4lf" % (step, running_loss.get_average()))
                 running_loss.reset()
 
-        val_metrics = val_mtr(val_dataset, model, collator, args)
+        val_metrics = val_mtr(val_dataset, model, collator, False, args)
         logger.info(", ".join(["val %s: %.4lf" % (k, val_metrics[k]) for k in val_metrics]))
         if stopper.step((val_metrics["mrr_d2t"] + val_metrics["mrr_t2d"]), model):
             break
@@ -126,7 +126,10 @@ def rerank(dataset, model, index_structure, index_text, score, alpha, collator, 
     else:
         return torch.LongTensor([index_text[i] for i in new_idx.detach().cpu().tolist()])
 
-def val_mtr(val_dataset, model, collator, args):
+def val_mtr(val_dataset, model, collator, apply_rerank, args):
+    with open("../datasets/mtr/PCdes/test.txt", "w") as f:
+        for i in range(len(val_dataset)):
+            f.write(val_dataset.smiles[i] + "\t" + val_dataset.texts[i] + "\n")
     val_loader = DataLoader(val_dataset, batch_size=args.val_batch_size, shuffle=False, num_workers=args.num_workers, collate_fn=collator)
     model.eval()
     drug_rep_total, text_rep_total = [], []
@@ -158,12 +161,12 @@ def val_mtr(val_dataset, model, collator, args):
         logger.info("Calculating cosine similarity...")
         for i in tqdm(range(n_samples)):
             score[i] = torch.cosine_similarity(drug_rep[i], text_rep)
-        if hasattr(model, "predict_similarity_score") and args.rerank:
+        if hasattr(model, "predict_similarity_score") and apply_rerank:
             logger.info("Reranking...")
         for i in tqdm(range(n_samples)):
             _, idx = torch.sort(score[i, :], descending=True)
             idx = idx.detach().cpu()
-            if hasattr(model, "predict_similarity_score") and args.rerank:
+            if hasattr(model, "predict_similarity_score") and apply_rerank:
                 idx = torch.cat((
                     rerank(val_dataset, model, [i], idx[:args.rerank_num].tolist(), score[i, idx[:args.rerank_num]], args.alpha_m2t, collator, args.device),
                     idx[args.rerank_num:]
@@ -171,10 +174,16 @@ def val_mtr(val_dataset, model, collator, args):
             for j, k in enumerate([1, 5, 10]):
                 rec_m2t[j] += recall_at_k(idx, i, k)
             mrr_m2t += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
+            """
+            if i % 10 == 0:
+                print(i, idx[:5].numpy())
+            if i == 690 or i == 1880 or i == 1890 or i == 2030:
+                print(val_dataset.smiles[i], _[:5], ((idx == i).nonzero(as_tuple=True)[0].item() + 1))
+            """
 
             _, idx = torch.sort(score[:, i], descending=True)
             idx = idx.detach().cpu()
-            if hasattr(model, "predict_similarity_score") and args.rerank:
+            if hasattr(model, "predict_similarity_score") and apply_rerank:
                 idx = torch.cat((
                     rerank(val_dataset, model, idx[:args.rerank_num].tolist(), [i], score[idx[:args.rerank_num], i], args.alpha_t2m, collator, args.device),
                     idx[args.rerank_num:]
@@ -182,6 +191,12 @@ def val_mtr(val_dataset, model, collator, args):
             for j, k in enumerate([1, 5, 10]):
                 rec_t2m[j] += recall_at_k(idx, i, k)
             mrr_t2m += 1.0 / ((idx == i).nonzero(as_tuple=True)[0].item() + 1)
+            """
+            if i % 10 == 0:
+                print(i, idx[:5].numpy())
+            if i == 690 or i == 1880 or i == 1890 or i == 2030:
+                print(val_dataset.texts[i], _[:5], ((idx == i).nonzero(as_tuple=True)[0].item() + 1))
+            """
 
         result = {
             "mrr_d2t": mrr_m2t / n_samples,
@@ -211,11 +226,11 @@ def main(args, config):
     
     if args.mode == "zero_shot":
         model.eval()
-        result = val_mtr(test_dataset, model, collator, args)
+        result = val_mtr(test_dataset, model, collator, args.rerank, args)
         print(result)
     elif args.mode == "train":
         train_mtr(train_dataset, val_dataset, model, collator, args)
-        result = val_mtr(test_dataset, model, collator, args)
+        result = val_mtr(test_dataset, model, collator, args.rerank, args)
         print(result)
 
 def add_arguments(parser):

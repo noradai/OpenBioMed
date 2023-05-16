@@ -7,7 +7,7 @@ from transformers import BertConfig, BertModel
 from models.drug_encoder.momu_gnn import MoMuGNN
 
 class TextEncoder(nn.Module):
-    def __init__(self, pretrained=True, model_name_or_path=None, dropout=0.0):
+    def __init__(self, pretrained=True, model_name_or_path=None, use_num_layers=-1, dropout=0.0):
         super(TextEncoder, self).__init__()
         if pretrained:  # if use pretrained scibert model
             self.main_model = BertModel.from_pretrained(model_name_or_path)
@@ -16,10 +16,19 @@ class TextEncoder(nn.Module):
             self.main_model = BertModel(config)
 
         self.dropout = nn.Dropout(dropout)
+        self.use_num_layers = use_num_layers
 
-    def forward(self, text):
-        output = self.main_model(**text)["pooler_output"]
-        logits = self.dropout(output)
+    def forward(self, text, return_cls=True):
+        if self.use_num_layers != -1:
+            text["output_hidden_states"] = True
+        output = self.main_model(**text)
+        if return_cls:
+            logits = output["pooler_output"]
+            logits = self.dropout(logits)
+        elif self.use_num_layers == -1:
+            logits = output["last_hidden_state"]
+        else:
+            logits = output["hidden_states"][self.use_num_layers]
         return logits
 
 class MoMu(nn.Module):
@@ -45,7 +54,7 @@ class MoMu(nn.Module):
             JK='last',
         )
 
-        self.text_encoder = TextEncoder(pretrained=False, dropout=self.bert_dropout)
+        self.text_encoder = TextEncoder(pretrained=False, dropout=self.bert_dropout, use_num_layers=-1 if "use_num_layers" not in config else config["use_num_layers"])
 
         self.graph_proj_head = nn.Sequential(
             nn.Linear(self.gin_hidden_dim, self.gin_hidden_dim),
@@ -88,6 +97,8 @@ class MoMu(nn.Module):
         h, _ = self.graph_encoder(structure, x, atomic_num_list, device)
         return self.graph_proj_head(h) 
 
-    def encode_text(self, text):
-        h = self.text_encoder(text)
-        return self.text_proj_head(h)
+    def encode_text(self, text, return_cls=True, proj=True):
+        h = self.text_encoder(text, return_cls)
+        if proj:
+            h = self.text_proj_head(h)
+        return h

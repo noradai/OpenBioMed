@@ -21,7 +21,7 @@ from sklearn.metrics import accuracy_score, f1_score
 from datasets.ctc_dataset import SUPPORTED_CTC_DATASETS
 from models.ctc_model import CTCModel
 from utils import EarlyStopping, AverageMeter, seed_all, ToDevice
-from utils.ditributed_utils import init_distributed_mode, get_rank, is_main_process, concat_reduce
+from utils.distributed_utils import init_distributed_mode, get_rank, is_main_process, concat_reduce
 from utils.schedulars import CosineAnnealingWarmupRestarts
 
 def add_arguments(parser):
