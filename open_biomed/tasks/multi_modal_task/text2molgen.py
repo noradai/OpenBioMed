@@ -19,7 +19,7 @@ import torch.nn.functional as F
 
 from datasets.text2mol_dataset import SUPPORTED_TEXT2MOLGEN_DATASET
 from feat.drug_featurizer import SUPPORTED_DRUG_FEATURIZER, DrugGGNNFeaturizer
-from models.drug_encoder import MoMu, MolALBEF
+from models.drug_encoder import MoMu, MolFM
 from models.drug_decoder import MoFlow, construct_mol, check_validity
 from utils import AverageMeter, ToDevice
 
@@ -27,7 +27,7 @@ atomic_num_list = [6, 7, 8, 9, 15, 16, 17, 35, 53, 0]
 
 SUPPORTED_DRUG_ENCODER = {
     "MoMu": MoMu,
-    "MolALBEF": MolALBEF
+    "MolFM": MolFM
 }
 SUPPORTED_DRUG_DECODER = {
     "MoFlow": MoFlow,

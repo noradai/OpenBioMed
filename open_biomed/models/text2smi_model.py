@@ -3,14 +3,14 @@ import torch.nn as nn
 
 from transformers.modeling_outputs import BaseModelOutput
 
-from models.drug_encoder import MoMu, MolALBEF, KVPLM
+from models.drug_encoder import MoMu, MolFM, KVPLM
 from models.text_encoder import BaseTransformers
 from models.drug_decoder.molt5 import MolT5
 
 SUPPORTED_ENCODER = {
     "SciBERT": BaseTransformers,
     "MoMu": MoMu,
-    "MolALBEF": MolALBEF,
+    "MolFM": MolFM,
     "KVPLM": KVPLM
 }
 

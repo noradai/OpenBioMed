@@ -3,7 +3,7 @@ import torch.nn as nn
 import json
 
 from transformers import AutoModel
-from models.drug_encoder.molalbef import MolALBEF
+from models.drug_encoder.molfm import MolFM
 from models.drug_encoder.momu import MoMu
 from models.drug_encoder.cnn import CNN
 from models.drug_encoder.molclr_gnn import GINet
@@ -15,7 +15,7 @@ SUPPORTED_DRUG_ENCODER = {
     "graphcl": MoMu,
     "molclr": GINet,
     "graphmvp": PygGNN,
-    "molalbef": MolALBEF
+    "molfm": MolFM
 }
 
 
@@ -50,7 +50,7 @@ class MLP(nn.Module):
 HEAD4ENCODER = {
     "deepeik": MLP,
     "momu": nn.Linear,
-    "molalbef": nn.Linear,
+    "molfm": nn.Linear,
     "molclr": nn.Linear,
     "graphmvp": nn.Linear
 }
@@ -63,7 +63,7 @@ class DPModel(nn.Module):
         # prepare model
         if config["model"] == "DeepEIK":
             self.encoder = SUPPORTED_DRUG_ENCODER[config["model"]](config["network"])
-        elif config["model"] == "graphcl" or config["model"] == "molalbef":
+        elif config["model"] == "graphcl" or config["model"] == "molfm":
             self.encoder = SUPPORTED_DRUG_ENCODER[config["model"]](config["network"]["structure"])
         else:
             self.encoder = SUPPORTED_DRUG_ENCODER[config["model"]](**config["network"]["structure"])
@@ -80,9 +80,9 @@ class DPModel(nn.Module):
         self.proj_head = HEAD4ENCODER[config["network"]["structure"]["name"]](self.encoder.output_dim, out_dim)
         
     def forward(self, drug):
-        if hasattr(self.encoder, "encode_structure") and not isinstance(self.encoder, MolALBEF):
+        if hasattr(self.encoder, "encode_structure") and not isinstance(self.encoder, MolFM):
             h = self.encoder.encode_structure(drug)  # Momu encoder_struct
-        elif not isinstance(self.encoder, MolALBEF):
+        elif not isinstance(self.encoder, MolFM):
             h, _ = self.encoder(drug)  # encoder_struct
         else:
             h = self.encoder.encode_structure_with_kg(drug["structure"], drug["kg"])

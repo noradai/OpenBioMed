@@ -9,7 +9,7 @@ from models.knowledge_encoder.transe import TransE
 
 from utils.mol_utils import convert_pyg_batch
 
-class MolALBEF(nn.Module):
+class MolFM(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config

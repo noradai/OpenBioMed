@@ -1,5 +1,5 @@
 {
-    "model": "MolALBEF-T5",
+    "model": "MolFM-T5",
     "data": {
         "drug": {
             "modality": ["structure", "text"],

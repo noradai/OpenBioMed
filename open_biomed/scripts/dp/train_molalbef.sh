@@ -8,8 +8,8 @@ python tasks/mol_task/dp.py \
 --dataset MoleculeNet \
 --dataset_path ../datasets/dp/moleculenet \
 --dataset_name $dataset \
---config_path ./configs/dp/molalbef.json \
---output_path ../ckpts/finetune_ckpts/dp/molalbef_finetune.pth \
+--config_path ./configs/dp/molfm.json \
+--output_path ../ckpts/finetune_ckpts/dp/molfm_finetune.pth \
 --num_workers 1 \
 --mode train \
 --batch_size 32 \

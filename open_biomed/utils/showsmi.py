@@ -1,7 +1,7 @@
 from rdkit import DataStructs, Chem
 from rdkit.Chem import AllChem, MACCSkeys
 
-with open("../assets/text2smi/molalbef-smi.txt", "r") as f:
+with open("../assets/text2smi/molfm-smi.txt", "r") as f:
     for i, line in enumerate(f.readlines()):
         if i == 0:
             continue

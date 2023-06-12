@@ -1,5 +1,5 @@
 {
-    "model": "MolALBEF-MolT5",
+    "model": "MolFM-MolT5",
     "data": {
         "drug": {
             "modality": ["structure", "text"],
@@ -28,7 +28,7 @@
     },
     "network": {
         "graph": {
-            "name": "MolALBEF",
+            "name": "MolFM",
             "gin_hidden_dim": 300,
             "gin_num_layers": 5,
             "drop_ratio": 0.0,
@@ -43,7 +43,7 @@
                 "margin": 1.0
             },
             "output_dim": 300,
-            "init_checkpoint": "../ckpts/fusion_ckpts/molalbef-ke/checkpoint_399.pth",
+            "init_checkpoint": "../ckpts/fusion_ckpts/molfm-ke/checkpoint_399.pth",
             "param_key": "model",
             "stop_grad": false
         },

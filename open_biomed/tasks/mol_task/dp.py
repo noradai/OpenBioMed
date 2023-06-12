@@ -245,7 +245,7 @@ def main(args, config):
 
     # prepare model
     task_num = get_num_task(args.dataset_name)
-    if len(config["data"]["drug"]["modality"]) > 1 and config["model"] != "molalbef":
+    if len(config["data"]["drug"]["modality"]) > 1 and config["model"] != "molfm":
         model = DeepEIK4DP(config["network"], task_num)
     else:
         model = DPModel(config, task_num)

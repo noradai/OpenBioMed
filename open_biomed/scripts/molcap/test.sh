@@ -1,6 +1,6 @@
 #!/bin/bash
 MODE="test"
-MODEL="molalbef"
+MODEL="molfm"
 DEVICE="cuda:0"
 EPOCHS=300
 

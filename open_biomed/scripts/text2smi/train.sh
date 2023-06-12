@@ -1,6 +1,6 @@
 #!/bin/bash
 MODE="train"
-MODEL="molalbef"
+MODEL="molfm"
 DEVICE="cuda:3"
 EPOCHS=200
 SAVE_FILE=../assets/text2smi/${MODEL}-smi.txt

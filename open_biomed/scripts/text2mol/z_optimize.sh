@@ -1,14 +1,14 @@
 #!/bin/bash
-ENCODER="molalbef"
+ENCODER="molfm"
 DECODER="moflow"
 DEVICE="cuda:0"
 
 ENCODER_CKPT="None"
 ENCODER_PARAM_KEY="None"
 
-if [ $ENCODER = "molalbef" ]; 
+if [ $ENCODER = "molfm" ]; 
 then
-    ENCODER_CKPT="../ckpts/fusion_ckpts/molalbef-prompt-tune/checkpoint_4.pth"
+    ENCODER_CKPT="../ckpts/fusion_ckpts/molfm-prompt-tune/checkpoint_4.pth"
     ENCODER_PARAM_KEY="model"
 elif [ $ENCODER = "momu" ]; 
 then

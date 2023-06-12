@@ -17,7 +17,7 @@ from torch.utils.data import DataLoader
 from utils import EarlyStopping, AverageMeter, DrugCollator, ToDevice, recall_at_k
 from utils.optimizers import BertAdam
 from datasets.mtr_dataset import SUPPORTED_MTR_DATASETS
-from models.drug_encoder import KVPLM, MoMu, MolALBEF, DrugBERT, BioMedGPT
+from models.drug_encoder import KVPLM, MoMu, MolFM, DrugBERT, BioMedGPT
 from models.mtr_model import MTRModel
 
 SUPPORTED_MTR_MODEL = {
@@ -25,7 +25,7 @@ SUPPORTED_MTR_MODEL = {
     "KV-PLM": KVPLM, 
     "KV-PLM*": KVPLM,
     "MoMu": MoMu, 
-    "MolALBEF": MolALBEF,
+    "MolFM": MolFM,
     "BioMedGPT": BioMedGPT,
     "combined": MTRModel
 }

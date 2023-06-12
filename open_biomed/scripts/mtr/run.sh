@@ -1,7 +1,7 @@
 #!/bin/bash
 MODE="zero_shot"
 TASK_MODE="paragraph"
-MODEL="molalbef"
+MODEL="molfm"
 DEVICE="cuda:0"
 EPOCHS=100
 
@@ -11,9 +11,9 @@ RERANK="no_rerank"
 
 FILTER_FILE="../datasets/mtr/momu_pretrain/pair.txt"
 
-if [ $MODEL = "molalbef" ]; 
+if [ $MODEL = "molfm" ]; 
 then
-    CKPT="../ckpts/fusion_ckpts/molalbef-ke-2/checkpoint_299.pth"
+    CKPT="../ckpts/fusion_ckpts/molfm-ke-2/checkpoint_299.pth"
     PARAM_KEY="model"
     RERANK="rerank"
 elif [ $MODEL = "momu" ]; 
