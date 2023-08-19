@@ -5,5 +5,5 @@ SentencePiece
 rdkit
 pandas
 scanpy
-eniops
+einops
 local_attention
